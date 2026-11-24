@@ -27,6 +27,8 @@ use Illuminate\Testing\TestResponse;
 
 use IXP\Models\Customer;
 
+use IXP\Models\User;
+
 use Tests\TestCase;
 
 /**
@@ -259,5 +261,42 @@ class MemberUpdateTest extends TestCase
             ->assertForbidden();
 
         $this->assertNull( $cust->fresh()->dateleave );
+    }
+
+    /**
+     * A PATCH which would deactivate the API key owner's own member is refused: ApiAuthenticate
+     * would refuse the key afterwards, and nothing could undo it through the API.
+     */
+    public function testDeactivatingTheKeyOwnersOwnMemberIsRefused(): void
+    {
+        $own    = Customer::findOrFail( User::where( 'username', 'travis' )->firstOrFail()->custid );
+        $before = $own->fresh()->getAttributes();
+
+        foreach( [ [ 'status' => Customer::STATUS_SUSPENDED ], [ 'dateleave' => '2020-01-01' ] ] as $change ) {
+            $this->patchMember( $own->id, $change )
+                ->assertStatus( 409 )
+                ->assertJsonPath( 'message', fn( $m ) => str_contains( $m, 'refuses the key' ) );
+        }
+
+        $this->assertEquals( $before, $own->fresh()->getAttributes(), 'a refused PATCH must change nothing' );
+
+        // the key still works, and a harmless change to the same member goes through
+        $this->patchMember( $own->id, [ 'maxprefixes' => ( (int)$own->maxprefixes ) + 1 ] )->assertOk();
+    }
+
+    /**
+     * A non-numeric id is a 404, not a number cast by MySQL: PATCH member/{id}abc used to
+     * change member {id}.
+     */
+    public function testANonNumericIdIsNotCastToANumber(): void
+    {
+        $cust   = $this->createMember( 'provupdcast' );
+        $before = $cust->fresh()->getAttributes();
+
+        $this->withHeader( 'X-IXP-Manager-API-Key', self::API_KEY_SUPERUSER )
+            ->patchJson( "/admin/api/v4/provisioning/member/{$cust->id}abc", [ 'dateleave' => '2026-11-01' ] )
+            ->assertNotFound();
+
+        $this->assertEquals( $before, $cust->fresh()->getAttributes() );
     }
 }

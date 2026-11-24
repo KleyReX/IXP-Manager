@@ -265,4 +265,32 @@ class AccessControlTest extends TestCase
             }
         }
     }
+
+    /**
+     * Every route parameter of the provisioning API is a database id and must be constrained
+     * to digits - otherwise MySQL casts '1abc' to 1 and the request reaches record 1. Checked
+     * over the registered routes, so that a route added later cannot forget it.
+     */
+    public function test_every_route_parameter_is_constrained_to_digits(): void
+    {
+        $checked = 0;
+
+        foreach( \Route::getRoutes() as $route ) {
+            if( !str_starts_with( $route->uri(), 'admin/api/v4/provisioning/' ) ) {
+                continue;
+            }
+
+            foreach( $route->parameterNames() as $parameter ) {
+                $this->assertSame( '[0-9]+', $route->wheres[ $parameter ] ?? null,
+                    "{$route->uri()}: {{$parameter}} is not constrained to digits" );
+                $checked++;
+            }
+        }
+
+        $this->assertGreaterThan( 0, $checked, 'no provisioning route parameters found' );
+
+        $this->withHeader( 'X-IXP-Manager-API-Key', self::API_KEY_SUPERUSER )
+            ->getJson( '/admin/api/v4/provisioning/vlan/1abc' )
+            ->assertNotFound();
+    }
 }

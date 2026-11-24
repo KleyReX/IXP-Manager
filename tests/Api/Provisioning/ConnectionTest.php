@@ -570,4 +570,19 @@ class ConnectionTest extends TestCase
             'the transaction was not rolled back as a whole'
         );
     }
+
+    /**
+     * A hostname which is not a string is a validation error. The inherited wizard rule ran
+     * IdnValidate on it, which passes the value to idn_to_ascii() - a TypeError, and a 500.
+     */
+    public function testANonStringHostnameIsAValidationError(): void
+    {
+        $cust = $this->createMember( self::PREFIX . 'host' );
+
+        $this->key()->postJson( "/admin/api/v4/provisioning/member/{$cust->id}/connection",
+            $this->payload( $this->vlanWithFreeAddresses(), $this->freeSwitchPort(), [ 'ipv4hostname' => [ 'x' ] ] )
+        )
+            ->assertStatus( 422 )
+            ->assertJsonValidationErrors( [ 'ipv4hostname' ] );
+    }
 }

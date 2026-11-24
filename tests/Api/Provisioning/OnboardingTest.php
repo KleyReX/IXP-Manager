@@ -488,4 +488,26 @@ class OnboardingTest extends TestCase
             ->assertStatus( 422 )
             ->assertJsonValidationErrors( [ 'connection.ipv4address' ] );
     }
+
+    /**
+     * Keys which would shadow a route model inside the inherited web rules are ignored in
+     * every section. 'member.cust' ended in a 500; 'user.id' exempted an existing username
+     * from the unique rule and ended on the database constraint.
+     */
+    public function testShadowingKeysInTheSectionsAreIgnored(): void
+    {
+        $existing = User::firstOrFail();
+
+        $this->key()->postJson( '/admin/api/v4/provisioning/onboarding', $this->order( 'shadow', [
+            'member' => [ 'cust' => 1, 'id' => 1 ],
+            'user'   => [ 'id' => $existing->id, 'username' => $existing->username ],
+        ] ) )
+            ->assertStatus( 422 )
+            ->assertJsonValidationErrors( [ 'user.username' ] );
+
+        $this->key()->postJson( '/admin/api/v4/provisioning/onboarding', $this->order( 'shadow2', [
+            'member' => [ 'cust' => 1, 'id' => 1 ],
+        ] ) )
+            ->assertStatus( 201 );
+    }
 }
