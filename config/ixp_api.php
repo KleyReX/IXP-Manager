@@ -260,4 +260,103 @@ return [
         */
         'rate_limit' => (int) env( 'IXP_API_PROVISIONING_RATE_LIMIT', 60 ),
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Outgoing webhooks
+    |--------------------------------------------------------------------------
+    |
+    | IXP Manager tells an external system (KleyReX's API5) about changes to
+    | members, users, contacts, connections, switch ports and notes - whoever
+    | made them: staff or members in the web UI, the provisioning API, artisan
+    | commands or the scheduler. Changes are recorded in an outbox inside the
+    | writing transaction and delivered after commit, signed per Standard
+    | Webhooks, with retries.
+    |
+    | OFF by default: nothing is recorded or sent until this is switched on.
+    |
+    | See: docs/fragments/w1b-hooks.md
+    |
+    */
+
+    'webhooks' => [
+
+        /*
+        | Master switch. While false, no change is recorded and nothing is sent.
+        */
+        'enabled' => env( 'IXP_WEBHOOKS_ENABLED', false ),
+
+        /*
+        | Where events go. The endpoint built from the IXP_WEBHOOKS_* keys is
+        | called `default`; a second receiver is one more entry here, with its
+        | own URL, secrets and filters.
+        |
+        |   url              https URL events are POSTed to. An endpoint without
+        |                    a URL does not exist.
+        |   secret           whsec_<base64 of at least 24 random bytes>
+        |   secret_previous  the secret being rotated out: while set, every
+        |                    request carries a signature with each of the two
+        |   events           comma-separated globs of event types to send, e.g.
+        |                    "member.*,connection.*"
+        |   exclude_events   comma-separated globs of event types not to send
+        |   skip_api_keys    comma-separated api_keys ids or token identifiers
+        |                    whose own changes are recorded but not sent to this
+        |                    endpoint (loop prevention)
+        */
+        'endpoints' => [
+            'default' => [
+                'url'               => env( 'IXP_WEBHOOKS_URL', '' ),
+                'secret'            => env( 'IXP_WEBHOOKS_SECRET', '' ),
+                'secret_previous'   => env( 'IXP_WEBHOOKS_SECRET_PREVIOUS', '' ),
+                'events'            => env( 'IXP_WEBHOOKS_EVENTS', '*' ),
+                'exclude_events'    => env( 'IXP_WEBHOOKS_EXCLUDE_EVENTS', '' ),
+                'skip_api_keys'     => env( 'IXP_WEBHOOKS_SKIP_API_KEYS', '' ),
+            ],
+        ],
+
+        /*
+        | Delivery attempts per event, the first included, and the age after
+        | which an undelivered event is given up (dead-lettered) regardless.
+        */
+        'max_attempts'      => (int) env( 'IXP_WEBHOOKS_MAX_ATTEMPTS', 11 ),
+        'max_age_hours'     => (int) env( 'IXP_WEBHOOKS_MAX_AGE_HOURS', 72 ),
+
+        /*
+        | Seconds to wait for the receiver: to connect, and for the whole request.
+        */
+        'timeout'           => (int) env( 'IXP_WEBHOOKS_TIMEOUT', 10 ),
+        'connect_timeout'   => (int) env( 'IXP_WEBHOOKS_CONNECT_TIMEOUT', 3 ),
+
+        /*
+        | Days to keep events whose deliveries are finished (delivered, given up
+        | or skipped). webhooks:prune runs daily.
+        */
+        'retention_days'    => (int) env( 'IXP_WEBHOOKS_RETENTION_DAYS', 30 ),
+
+        /*
+        | Try to deliver at the end of the request or command which made the
+        | change, after the response has been sent; otherwise the scheduler's
+        | per-minute webhooks:deliver run delivers.
+        |
+        |   auto   for commands, and for requests under PHP-FPM or LiteSpeed,
+        |          which release the client first. Not under Apache's mod_php,
+        |          where the client would wait for the attempt.
+        |   true   always - also under mod_php
+        |   false  never: the scheduler only
+        */
+        'deliver_after_response' => env( 'IXP_WEBHOOKS_DELIVER_AFTER_RESPONSE', 'auto' ),
+
+        /*
+        | Record changes made by artisan commands, the scheduler and queue
+        | workers (SNMP-discovered ports, user:create, ...), not only those
+        | made over HTTP.
+        */
+        'include_console'   => env( 'IXP_WEBHOOKS_INCLUDE_CONSOLE', true ),
+
+        /*
+        | Plain http:// endpoints are refused unless this is true. For a
+        | development receiver only: the payloads carry personal data.
+        */
+        'allow_http'        => env( 'IXP_WEBHOOKS_ALLOW_HTTP', false ),
+    ],
 ];
