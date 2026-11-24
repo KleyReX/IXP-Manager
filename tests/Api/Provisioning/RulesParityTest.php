@@ -25,6 +25,7 @@ namespace Tests\Api\Provisioning;
 use IXP\Http\Requests\Api\V4\Provisioning\StoreCustomer;
 use IXP\Http\Requests\Api\V4\Provisioning\StoreUser;
 use IXP\Http\Requests\Api\V4\Provisioning\StoreConnection;
+use IXP\Http\Requests\Api\V4\Provisioning\UpdateCustomer;
 use IXP\Http\Requests\Customer\Store as WebStoreCustomer;
 use IXP\Http\Requests\StoreVirtualInterfaceWizard as WebStoreWizard;
 use IXP\Http\Requests\User\Store as WebStoreUser;
@@ -82,6 +83,60 @@ class RulesParityTest extends TestCase
         $this->assertEmpty(
             array_intersect_key( StoreCustomer::delta(), $web->rules() ),
             'The customer delta shadows a rule which already exists upstream.'
+        );
+    }
+
+    /**
+     * Changing a member must be validated as the web edit form validates it - the same web
+     * request serves both create and edit there.
+     */
+    public function testCustomerUpdateRulesMatchWebForm(): void
+    {
+        foreach( [ Customer::TYPE_FULL, Customer::TYPE_ASSOCIATE ] as $type ) {
+            $payload = [ 'type' => $type ];
+
+            $web = WebStoreCustomer::create( '/', 'PUT', $payload );
+            $api = UpdateCustomer::create( '/', 'PATCH', $payload );
+
+            $this->assertEquals(
+                $web->rules(),
+                array_diff_key( $api->rules(), UpdateCustomer::delta() ),
+                "Customer update rules have diverged from the web edit form for type {$type}."
+            );
+        }
+    }
+
+    /**
+     * The update delta must add only, and must contain the create delta - a field validated
+     * on creation must not go unvalidated on change.
+     */
+    public function testCustomerUpdateDeltaAddsOnly(): void
+    {
+        $web = WebStoreCustomer::create( '/', 'PUT', [ 'type' => Customer::TYPE_FULL ] );
+
+        $this->assertEmpty(
+            array_intersect_key( UpdateCustomer::delta(), $web->rules() ),
+            'The customer update delta shadows a rule which already exists upstream.'
+        );
+
+        $this->assertEquals(
+            StoreCustomer::delta(),
+            array_intersect_key( UpdateCustomer::delta(), StoreCustomer::delta() ),
+            'The customer update delta must include the create delta unchanged.'
+        );
+    }
+
+    /**
+     * Every field a PATCH may change must be validated - otherwise it would be ignored, or
+     * worse, written unvalidated.
+     */
+    public function testEveryUpdatableFieldIsValidated(): void
+    {
+        $rules = UpdateCustomer::create( '/', 'PATCH', [ 'type' => Customer::TYPE_FULL ] )->rules();
+
+        $this->assertEmpty(
+            array_diff( UpdateCustomer::FIELDS, array_keys( $rules ) ),
+            'UpdateCustomer::FIELDS names a field without a validation rule.'
         );
     }
 

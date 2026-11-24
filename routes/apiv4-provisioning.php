@@ -37,8 +37,8 @@ use IXP\Http\Middleware\Provisioning\ShortCircuitKnownReference;
 | Registered by IXP\Providers\ProvisioningRouteServiceProvider under the prefix
 | `admin/api/v4/provisioning`.
 |
-| Anything which creates, changes or removes state MUST use POST, PUT or DELETE -
-| never GET.
+| Anything which creates, changes or removes state MUST use POST, PUT, PATCH or
+| DELETE - never GET.
 |
 */
 
@@ -53,6 +53,7 @@ Route::get( 'vlan/{vlan}/address', 'IpController@addresses' )->name( 'api-v4-pro
 Route::group( [ 'prefix' => 'member' ], function() {
     Route::post( '',                'MemberController@storeCustomer' )->name( 'api-v4-provisioning@member-store'      );
     Route::get(  '{cust}',          'MemberController@showCustomer'  )->name( 'api-v4-provisioning@member-show'       );
+    Route::patch( '{cust}',         'MemberController@updateCustomer' )->name( 'api-v4-provisioning@member-update'    );
     Route::post( '{cust}/user',     'MemberController@storeUser'     )->name( 'api-v4-provisioning@member-user-store' );
 
     Route::post( '{cust}/connection', 'ConnectionController@store' )->name( 'api-v4-provisioning@connection-store' );

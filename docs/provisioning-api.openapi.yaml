@@ -125,7 +125,7 @@ tags:
       work, which switches and infrastructures exist, which ports are free, which addresses
       are free.
   - name: Members
-    description: Creating and reading members (customers) and their portal users.
+    description: Creating, reading and changing members (customers), and creating their portal users.
   - name: Connections
     description: Creating, listing and removing a member's connection to the exchange.
   - name: Onboarding
@@ -556,6 +556,16 @@ paths:
                   dateleave: null
                   reseller: null
                   isReseller: false
+                  corpwww: https://www.example.net
+                  nocphone: '+49 69 1234567'
+                  noc24hphone: null
+                  nocemail: noc@example.net
+                  nochours: 24x7
+                  nocwww: null
+                  MD5Support: 'YES'
+                  activepeeringmatrix: true
+                  peeringdb_oauth: false
+                  updated_at: '2026-08-01T10:00:00+00:00'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -633,12 +643,116 @@ paths:
                   dateleave: null
                   reseller: null
                   isReseller: false
+                  corpwww: https://www.example.net
+                  nocphone: '+49 69 1234567'
+                  noc24hphone: null
+                  nocemail: noc@example.net
+                  nochours: 24x7
+                  nocwww: null
+                  MD5Support: 'YES'
+                  activepeeringmatrix: true
+                  peeringdb_oauth: false
+                  updated_at: '2026-08-01T10:00:00+00:00'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    patch:
+      tags: [ Members ]
+      operationId: updateMember
+      summary: Change a member
+      description: |
+        Changes any subset of the member's fields - the ones `POST /member` takes, plus
+        `peeringdb_oauth`. A field that is left out keeps its value; a field sent as `null` is
+        cleared. Setting a leave date is just `{"dateleave": "2026-11-01"}`.
+
+        The change is validated as the web edit form validates it: `UpdateCustomer` completes
+        the request with the member's current values and runs the result through the rules
+        `POST /member` uses - the web rules plus the declared delta, held to them by
+        `RulesParityTest`. One deliberate leniency: a field which is empty today and not sent
+        is not filled in, so a member whose `nocemail` or `peeringpolicy` was never set - which
+        the web form would insist on - can still be given a leave date. A value that is sent,
+        or already stored, is validated in full.
+
+        Fields outside the edit form (`id`, `creator`, the company detail ids, ...) are
+        ignored. The change is attributed to the key's owner (`lastupdatedby`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MemberUpdate'
+            examples:
+              leaveDate:
+                summary: set the leave date
+                value:
+                  dateleave: '2026-11-01'
+              clearLeaveDate:
+                summary: clear it again
+                value:
+                  dateleave: null
+      responses:
+        '200':
+          description: The member after the change, and the attributes which actually changed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MemberUpdateResult'
+              example:
+                member:
+                  id: 97
+                  name: Example Networks GmbH
+                  shortname: examplenet
+                  abbreviatedName: EXAMPLE
+                  type: 1
+                  status: 1
+                  autsys: 12586
+                  maxprefixes: 500
+                  maxprefixesv6: 500
+                  peeringemail: peering@example.net
+                  peeringmacro: AS-EXAMPLE
+                  peeringmacrov6: null
+                  peeringpolicy: open
+                  irrdb: 1
+                  datejoin: '2026-08-01'
+                  dateleave: '2026-11-01'
+                  reseller: null
+                  isReseller: false
+                  corpwww: https://www.example.net
+                  nocphone: '+49 69 1234567'
+                  noc24hphone: null
+                  nocemail: noc@example.net
+                  nochours: 24x7
+                  nocwww: null
+                  MD5Support: 'YES'
+                  activepeeringmatrix: true
+                  peeringdb_oauth: false
+                  updated_at: '2026-11-24T20:03:34+00:00'
+                changed: [ dateleave ]
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          description: |
+            The completed record failed validation - a value the web edit form would refuse, a
+            `shortname` taken by another member, or a reseller change the inherited reseller
+            checks forbid. Nothing is written.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+              example:
+                message: The nocemail field must be a valid email address.
+                errors:
+                  nocemail:
+                    - The nocemail field must be a valid email address.
         '429':
           $ref: '#/components/responses/TooManyRequests'
 
@@ -1697,9 +1811,8 @@ components:
       title: Member
       description: |
         A member as this API reports it — the explicit field list of
-        `MemberController::memberAsArray()`, not the model's `toArray()`. Fields of the `cust`
-        table which are accepted on input but not echoed back (`corpwww`, the NOC fields,
-        `activepeeringmatrix`, `MD5Support`) are deliberately absent here.
+        `MemberController::memberAsArray()`, not the model's `toArray()`. Every field
+        `PATCH /member/{cust}` can change is included, so that a change can be read back.
       required:
         - id
         - name
@@ -1719,6 +1832,16 @@ components:
         - dateleave
         - reseller
         - isReseller
+        - corpwww
+        - nocphone
+        - noc24hphone
+        - nocemail
+        - nochours
+        - nocwww
+        - MD5Support
+        - activepeeringmatrix
+        - peeringdb_oauth
+        - updated_at
       properties:
         id:
           type: integer
@@ -1767,6 +1890,30 @@ components:
           description: '`cust.id` of the reseller, or null when the member is not resold.'
         isReseller:
           type: boolean
+        corpwww:
+          type: [ string, 'null' ]
+        nocphone:
+          type: [ string, 'null' ]
+        noc24hphone:
+          type: [ string, 'null' ]
+        nocemail:
+          type: [ string, 'null' ]
+        nochours:
+          type: [ string, 'null' ]
+          enum: [ 24x7, 8x5, 8x7, 12x5, 12x7, null ]
+        nocwww:
+          type: [ string, 'null' ]
+        MD5Support:
+          type: [ string, 'null' ]
+          enum: [ UNKNOWN, 'YES', MANDATORY, PREFERRED, 'NO', null ]
+        activepeeringmatrix:
+          type: boolean
+        peeringdb_oauth:
+          type: boolean
+        updated_at:
+          type: [ string, 'null' ]
+          format: date-time
+          description: When the member was last changed, by any path - ISO 8601.
 
     User:
       type: object
@@ -2077,6 +2224,85 @@ components:
           description: Whether this member is itself a reseller.
         activepeeringmatrix:
           type: boolean
+
+    MemberUpdate:
+      type: object
+      title: MemberUpdate
+      description: |
+        The body of `PATCH /member/{cust}`: any subset of `MemberInput`'s fields, plus
+        `peeringdb_oauth`. Nothing is required. A field left out keeps its value; a field sent
+        as `null` is cleared. The definitions are `MemberInput`'s - see there for each rule.
+      properties:
+        name:
+          $ref: '#/components/schemas/MemberInput/properties/name'
+        type:
+          $ref: '#/components/schemas/MemberInput/properties/type'
+        shortname:
+          $ref: '#/components/schemas/MemberInput/properties/shortname'
+        abbreviatedName:
+          $ref: '#/components/schemas/MemberInput/properties/abbreviatedName'
+        corpwww:
+          $ref: '#/components/schemas/MemberInput/properties/corpwww'
+        datejoin:
+          $ref: '#/components/schemas/MemberInput/properties/datejoin'
+        dateleave:
+          $ref: '#/components/schemas/MemberInput/properties/dateleave'
+        status:
+          $ref: '#/components/schemas/MemberInput/properties/status'
+        MD5Support:
+          $ref: '#/components/schemas/MemberInput/properties/MD5Support'
+        autsys:
+          $ref: '#/components/schemas/MemberInput/properties/autsys'
+        maxprefixes:
+          $ref: '#/components/schemas/MemberInput/properties/maxprefixes'
+        maxprefixesv6:
+          $ref: '#/components/schemas/MemberInput/properties/maxprefixesv6'
+        peeringemail:
+          $ref: '#/components/schemas/MemberInput/properties/peeringemail'
+        peeringmacro:
+          $ref: '#/components/schemas/MemberInput/properties/peeringmacro'
+        peeringmacrov6:
+          $ref: '#/components/schemas/MemberInput/properties/peeringmacrov6'
+        peeringpolicy:
+          $ref: '#/components/schemas/MemberInput/properties/peeringpolicy'
+        irrdb:
+          $ref: '#/components/schemas/MemberInput/properties/irrdb'
+        activepeeringmatrix:
+          $ref: '#/components/schemas/MemberInput/properties/activepeeringmatrix'
+        nocphone:
+          $ref: '#/components/schemas/MemberInput/properties/nocphone'
+        noc24hphone:
+          $ref: '#/components/schemas/MemberInput/properties/noc24hphone'
+        nocemail:
+          $ref: '#/components/schemas/MemberInput/properties/nocemail'
+        nochours:
+          $ref: '#/components/schemas/MemberInput/properties/nochours'
+        nocwww:
+          $ref: '#/components/schemas/MemberInput/properties/nocwww'
+        isReseller:
+          $ref: '#/components/schemas/MemberInput/properties/isReseller'
+        isResold:
+          $ref: '#/components/schemas/MemberInput/properties/isResold'
+        reseller:
+          $ref: '#/components/schemas/MemberInput/properties/reseller'
+        peeringdb_oauth:
+          type: boolean
+          description: Whether the member's users may log in with their PeeringDB account.
+
+    MemberUpdateResult:
+      type: object
+      title: MemberUpdateResult
+      required: [ member, changed ]
+      properties:
+        member:
+          $ref: '#/components/schemas/Member'
+        changed:
+          type: array
+          items:
+            type: string
+          description: |
+            The attributes which actually changed, under their column names - empty when the
+            PATCH matched what was stored. `updated_at` and `lastupdatedby` are not listed.
 
     UserInput:
       type: object

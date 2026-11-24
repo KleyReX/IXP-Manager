@@ -37,7 +37,8 @@ use IXP\Http\Controllers\Api\V4\Controller;
 
 use IXP\Http\Requests\Api\V4\Provisioning\{
     StoreCustomer,
-    StoreUser
+    StoreUser,
+    UpdateCustomer
 };
 
 use IXP\Models\{
@@ -51,14 +52,16 @@ use IXP\Models\{
 /**
  * Provisioning API - Member Controller
  *
- * Creates members (customers) and their portal users.
+ * Creates and changes members (customers) and creates their portal users.
  *
- * The two store methods mirror the web controllers rather than calling them: those return
- * redirects and push flash messages, neither of which a machine caller can use. What matters
- * is that the resulting database state is identical, which MemberContractTest asserts
- * directly by posting the same payload to both entry points and diffing the rows.
+ * The store and update methods mirror the web controllers rather than calling them: those
+ * return redirects and push flash messages, neither of which a machine caller can use. What
+ * matters is that the resulting database state is identical, which MemberContractTest and
+ * MemberUpdateTest assert directly by sending the same data to both entry points and diffing
+ * the rows.
  *
  * @see \IXP\Http\Controllers\Customer\CustomerController::store()   the web equivalent
+ * @see \IXP\Http\Controllers\Customer\CustomerController::update()  the web equivalent
  * @see \IXP\Http\Controllers\User\UserController::store()           the web equivalent
  *
  * @author     KleyReX
@@ -112,6 +115,38 @@ class MemberController extends Controller
     public function showCustomer( Customer $cust ): JsonResponse
     {
         return response()->json( [ 'member' => $this->memberAsArray( $cust ) ] );
+    }
+
+    /**
+     * Change a member.
+     *
+     * Mirrors CustomerController@update. Fields the request does not mention keep their value
+     * - UpdateCustomer fills them in before validation, so the change is validated as the web
+     * edit form would validate it - and only validated fields reach the model. The response
+     * names the attributes which actually changed, so that a caller can log what it did.
+     *
+     * @param  UpdateCustomer  $r
+     * @param  Customer        $cust
+     *
+     * @return JsonResponse
+     */
+    public function updateCustomer( UpdateCustomer $r, Customer $cust ): JsonResponse
+    {
+        $cust->update( array_merge( $r->validated(), [
+            'lastupdatedby'     => Auth::id(),
+            'reseller'          => $r->boolean( 'isResold' ) ? $r->input( 'reseller' ) : null,
+        ] ) );
+
+        $changed = array_values( array_diff( array_keys( $cust->getChanges() ), [ 'updated_at', 'lastupdatedby' ] ) );
+
+        Cache::forget( 'admin_home_customers' );
+
+        if( $changed ) {
+            Log::notice( 'Provisioning API: changed ' . config( 'ixp_fe.lang.customer.one' )
+                . " {$cust->name} (id {$cust->id}): " . implode( ', ', $changed ) . ' as ' . Auth::user()->username );
+        }
+
+        return response()->json( [ 'member' => $this->memberAsArray( $cust->refresh() ), 'changed' => $changed ] );
     }
 
     /**
@@ -197,6 +232,16 @@ class MemberController extends Controller
             'dateleave'         => $this->asDate( $cust->dateleave ),
             'reseller'          => $cust->reseller,
             'isReseller'        => (bool)$cust->isReseller,
+            'corpwww'           => $cust->corpwww,
+            'nocphone'          => $cust->nocphone,
+            'noc24hphone'       => $cust->noc24hphone,
+            'nocemail'          => $cust->nocemail,
+            'nochours'          => $cust->nochours,
+            'nocwww'            => $cust->nocwww,
+            'MD5Support'        => $cust->MD5Support,
+            'activepeeringmatrix' => (bool)$cust->activepeeringmatrix,
+            'peeringdb_oauth'   => (bool)$cust->peeringdb_oauth,
+            'updated_at'        => $cust->updated_at?->toIso8601String(),
         ];
     }
 
