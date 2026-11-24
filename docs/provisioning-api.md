@@ -70,6 +70,11 @@ Three operational points:
 ## Conventions
 
 - Base path: `/admin/api/v4/provisioning`
+- **`X-Correlation-Id`** (optional, every endpoint): 1 to 100 characters from
+  `A-Z a-z 0-9 . _ : -`; anything else is `422` before anything is written, whether webhooks
+  are on or off. Echoed in the response and stamped on every webhook event the request
+  causes, so that a caller which also receives the webhooks recognises the echo of its own
+  commands. See [provisioning-webhooks.md](provisioning-webhooks.md).
 - Anything which creates, changes or removes state uses `POST`, `PATCH` or `DELETE` — never
   `GET`. There is no `PUT`: nothing is replaced wholesale.
 - **`PATCH` changes only what it is given.** A field left out keeps its value; a field sent as
@@ -1806,6 +1811,13 @@ member then has a connection again. A deadlock is retried, from a fresh read of 
 - **Reference data is not changed here.** No endpoint changes a VLAN, a switch, a facility, a
   rack or a vendor, and an IRRDB source can be found or created but not changed or deleted;
   those remain web UI operations.
+
+## Webhooks
+
+The other direction - IXP Manager telling API5 about changes, whoever made them, including
+staff and member users in the web UI - is described in
+[provisioning-webhooks.md](provisioning-webhooks.md). It is off by default
+(`IXP_WEBHOOKS_ENABLED`) and needs `php artisan migrate` for its three tables.
 
 ## Machine-readable specification
 
