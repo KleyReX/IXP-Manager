@@ -81,6 +81,12 @@ Route::post( 'onboarding', 'OnboardingController@store' )
 
 
 // ---- wave 1: contacts ---------------------------------------------------
+Route::get(    'contact-group',         'ContactController@groups'  )->name( 'api-v4-provisioning@contact-group-index' );
+Route::get(    'member/{cust}/contact', 'ContactController@index'   )->name( 'api-v4-provisioning@contact-index'       );
+Route::post(   'member/{cust}/contact', 'ContactController@store'   )->name( 'api-v4-provisioning@contact-store'       );
+Route::get(    'contact/{contact}',     'ContactController@show'    )->name( 'api-v4-provisioning@contact-show'        );
+Route::patch(  'contact/{contact}',     'ContactController@update'  )->name( 'api-v4-provisioning@contact-update'      );
+Route::delete( 'contact/{contact}',     'ContactController@destroy' )->name( 'api-v4-provisioning@contact-destroy'     );
 
 
 
