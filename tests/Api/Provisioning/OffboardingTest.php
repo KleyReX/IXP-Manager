@@ -711,6 +711,36 @@ class OffboardingTest extends TestCase
     }
 
     /**
+     * The rest of what an offboarding leaves alone and reports: equipment in the exchange's
+     * racks, console server ports, and - for a reseller - resold members which have not left.
+     * A resold member which has left is not mentioned.
+     */
+    public function testRackKitConsolePortsAndResoldMembersAreReported(): void
+    {
+        $reseller = $this->createMember( 'offbreseller' );
+        $resold   = $this->createMember( 'offbresold' );
+        $gone     = $this->createMember( 'offbresoldgone', [ 'dateleave' => '2026-02-28' ] );
+
+        DB::table( 'cust' )->where( 'id', $reseller->id )->update( [ 'isReseller' => 1 ] );
+        DB::table( 'cust' )->whereIn( 'id', [ $resold->id, $gone->id ] )->update( [ 'reseller' => $reseller->id ] );
+
+        $kit = DB::table( 'custkit' )->insertGetId( [ 'custid' => $reseller->id, 'cabinetid' => 1, 'name' => 'Router R1', 'descr' => '' ] );
+
+        $cs  = DB::table( 'console_server' )->insertGetId( [ 'vendor_id' => 1, 'cabinet_id' => 1, 'name' => 'CS-OFFB', 'hostname' => 'cs-offb.example.com', 'active' => 1 ] );
+        $csc = DB::table( 'consoleserverconnection' )->insertGetId( [ 'custid' => $reseller->id, 'console_server_id' => $cs, 'port' => 'Port 7', 'description' => 'R1 console' ] );
+
+        $before = [ $this->row( 'custkit', $kit ), $this->row( 'consoleserverconnection', $csc ), $this->row( 'cust', $resold->id ) ];
+
+        $response = $this->offboard( $reseller->id )->assertOk();
+
+        $this->assertCount( 1, self::warningsWith( $response, '1 piece(s) of colocated equipment are still recorded for this member: Router R1 (rack Cabinet 1).' ) );
+        $this->assertCount( 1, self::warningsWith( $response, '1 console server connection(s) are still assigned to this member: CS-OFFB port Port 7.' ) );
+        $this->assertCount( 1, self::warningsWith( $response, "reseller of 1 member(s) which have not left: {$resold->name} (id {$resold->id})." ) );
+
+        $this->assertEquals( $before, [ $this->row( 'custkit', $kit ), $this->row( 'consoleserverconnection', $csc ), $this->row( 'cust', $resold->id ) ] );
+    }
+
+    /**
      * A suspended member becomes Not Connected, which IXP Manager counts as active. With a leave
      * date ahead that lets its users back in until then, and the answer says so; with one reached
      * it changes nothing for them, and there is nothing to say.
