@@ -1,0 +1,718 @@
+# Fragment of docs/provisioning-api.openapi.yaml - wave 1, work package "contacts".
+#
+# To merge: add `paths` and `components.schemas` to the main specification. The operations use
+# the tag `Contacts`, which belongs in the top-level `tags` list:
+#
+#   - name: Contacts
+#     description: A member's contact persons and their roles (contact groups).
+#
+# References to #/components/parameters/CustomerId, #/components/responses/* and
+# #/components/schemas/{Error,ValidationError} point into the main specification.
+
+paths:
+
+  /contact-group:
+    get:
+      tags: [ Contacts ]
+      operationId: listContactGroups
+      summary: List the contact groups a contact can be given
+      description: |
+        The contact groups - roles such as Billing or Technical, and any further configured
+        group type - so that a caller can map names to the ids `roles` takes.
+
+        Contact groups are optional, configured in `config/contact_group.php`, which a stock
+        installation does not have. As on the web contact pages they are on only when that file
+        defines the `ROLE` type. Then the groups of the configured types are listed, as the web
+        contact group list lists them, and `enabled` is true; otherwise the list is empty and
+        `enabled` is false, so that "no groups" can be told from "groups are off".
+
+        A contact can be given an *active* group of a listed type. Built by
+        `ContactController::groups()` and `ContactGroupPresenter`.
+      parameters:
+        - name: type
+          in: query
+          required: false
+          description: Restrict to one group type. A type with no groups gives an empty list.
+          schema:
+            type: string
+          example: ROLE
+        - name: active
+          in: query
+          required: false
+          description: |
+            `1` for active groups only, `0` for inactive ones. Laravel's `boolean` rule: the words
+            `true` and `false` are refused in a query string.
+          schema:
+            type: integer
+            enum: [ 0, 1 ]
+          example: 1
+      responses:
+        '200':
+          description: The contact groups, ordered by type and name.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContactGroupList'
+              examples:
+                configured:
+                  summary: groups configured with the ROLE type
+                  value:
+                    enabled: true
+                    contact_groups:
+                      - id: 3
+                        name: Admin
+                        description: Contact role for admin matters
+                        type: ROLE
+                        active: true
+                        limited_to: 0
+                        created_at: '2014-01-06T12:54:22+00:00'
+                        updated_at: null
+                      - id: 1
+                        name: Billing
+                        description: Contact role for billing matters
+                        type: ROLE
+                        active: true
+                        limited_to: 1
+                        created_at: '2014-01-06T12:54:22+00:00'
+                        updated_at: '2026-11-24T20:03:34+00:00'
+                notConfigured:
+                  summary: no config/contact_group.php, or one without the ROLE type
+                  value:
+                    enabled: false
+                    contact_groups: []
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          description: A filter is malformed, for example `active=yes`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+              example:
+                message: The active field must be true or false.
+                errors:
+                  active:
+                    - The active field must be true or false.
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /member/{cust}/contact:
+    parameters:
+      - $ref: '#/components/parameters/CustomerId'
+    get:
+      tags: [ Contacts ]
+      operationId: listMemberContacts
+      summary: List a member's contacts
+      description: |
+        The member's contacts with their roles, ordered by name. An empty array for a member
+        without contacts - not a `404`.
+
+        `role` restricts the list to the contacts in one contact group. It reads the stored
+        group links, whether or not groups are configured today. An id which names no group is
+        `422`: the web list ignores a filter it does not recognise and shows every contact,
+        which here would hand a caller asking for its billing contacts all of them.
+      parameters:
+        - name: role
+          in: query
+          required: false
+          description: A `contact_group.id`, as `GET /contact-group` lists them.
+          schema:
+            type: integer
+            minimum: 1
+          example: 1
+      responses:
+        '200':
+          description: The member's contacts.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ contacts ]
+                properties:
+                  contacts:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Contact'
+              example:
+                contacts:
+                  - id: 42
+                    custid: 97
+                    name: Erika Mustermann
+                    position: Head of Network Operations
+                    email: erika@example.net
+                    phone: '+49 69 1234567'
+                    mobile: '+49 170 1234567'
+                    notes: Prefers email.
+                    roles:
+                      - id: 1
+                        name: Billing
+                        type: ROLE
+                    created_at: '2026-11-24T20:15:02+00:00'
+                    updated_at: '2026-11-24T20:15:02+00:00'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          description: '`role` is not an integer, or names no contact group.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+              example:
+                message: The selected role is invalid.
+                errors:
+                  role:
+                    - The selected role is invalid.
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    post:
+      tags: [ Contacts ]
+      operationId: createMemberContact
+      summary: Create a contact for a member
+      description: |
+        Mirrors `ContactController::doStore()`: `creator` is the username and `lastupdatedby`
+        the id of the key's owner, and each role becomes a `contact_to_group` row with
+        timestamps. Contact and group links are written in one transaction.
+
+        **Group limits are checked before anything is written**, inside that transaction and
+        under a row lock on the member. The web saves the contact first and finds a full group
+        afterwards, leaving a contact without its roles; here a full group is `422` and nothing
+        is saved, and two requests cannot both take the last place in a group.
+
+        The member comes from the route: a `custid` in the body is overwritten with it.
+
+        **Not idempotent.** A retry after a timeout creates a second contact; list the member's
+        contacts before retrying.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ContactInput'
+            example:
+              name: Erika Mustermann
+              position: Head of Network Operations
+              email: erika@example.net
+              phone: '+49 69 1234567'
+              mobile: '+49 170 1234567'
+              notes: Prefers email.
+              roles: [ 1, 2 ]
+      responses:
+        '201':
+          description: The contact was created.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ contact ]
+                properties:
+                  contact:
+                    $ref: '#/components/schemas/Contact'
+              example:
+                contact:
+                  id: 42
+                  custid: 97
+                  name: Erika Mustermann
+                  position: Head of Network Operations
+                  email: erika@example.net
+                  phone: '+49 69 1234567'
+                  mobile: '+49 170 1234567'
+                  notes: Prefers email.
+                  roles:
+                    - id: 1
+                      name: Billing
+                      type: ROLE
+                    - id: 2
+                      name: Technical
+                      type: ROLE
+                  created_at: '2026-11-24T20:15:02+00:00'
+                  updated_at: '2026-11-24T20:15:02+00:00'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: |
+            A group link collided with one written by another request at the same moment. Not
+            expected for a new contact, whose id nothing else knows yet; answered rather than
+            left to become a `500`. Nothing was created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                message: >-
+                  Another request linked the same contact group while this contact was being
+                  created. Nothing was created. Retry.
+        '422':
+          description: |
+            The payload failed validation, or a role cannot be given: it names no group, the
+            group is inactive or of a type that is not configured, contact groups are off, or
+            the group is full for this member. Nothing is written.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+              examples:
+                invalidEmail:
+                  summary: a value the web form would refuse
+                  value:
+                    message: The email must be a valid email address.
+                    errors:
+                      email:
+                        - The email must be a valid email address.
+                groupFull:
+                  summary: a limited group with no room left for this member
+                  value:
+                    message: >-
+                      Contact group ROLE: Billing has a limited membership and is full (1 of 1
+                      for this member). Nothing was changed.
+                    errors:
+                      roles:
+                        - >-
+                          Contact group ROLE: Billing has a limited membership and is full (1 of
+                          1 for this member). Nothing was changed.
+                groupsOff:
+                  summary: roles sent while contact groups are not configured
+                  value:
+                    message: >-
+                      Contact groups are not configured in this IXP Manager
+                      (config/contact_group.php with the ROLE type), so a contact cannot be
+                      given roles.
+                    errors:
+                      roles:
+                        - >-
+                          Contact groups are not configured in this IXP Manager
+                          (config/contact_group.php with the ROLE type), so a contact cannot be
+                          given roles.
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /contact/{contact}:
+    parameters:
+      - name: contact
+        in: path
+        required: true
+        description: |
+          The contact's `contact.id`. Resolved by route model binding, so an unknown id is `404`.
+        schema:
+          type: integer
+          minimum: 1
+        example: 42
+    get:
+      tags: [ Contacts ]
+      operationId: showContact
+      summary: Read a contact
+      description: The same representation the list and the write endpoints produce.
+      responses:
+        '200':
+          description: The contact.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ contact ]
+                properties:
+                  contact:
+                    $ref: '#/components/schemas/Contact'
+              example:
+                contact:
+                  id: 42
+                  custid: 97
+                  name: Erika Mustermann
+                  position: Head of Network Operations
+                  email: erika@example.net
+                  phone: '+49 69 1234567'
+                  mobile: '+49 170 1234567'
+                  notes: Prefers email.
+                  roles:
+                    - id: 1
+                      name: Billing
+                      type: ROLE
+                  created_at: '2026-11-24T20:15:02+00:00'
+                  updated_at: '2026-11-24T20:15:02+00:00'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    patch:
+      tags: [ Contacts ]
+      operationId: updateContact
+      summary: Change a contact
+      description: |
+        Changes any subset of the contact's fields, its roles, and the member it belongs to. A
+        field that is left out keeps its value; a field sent as `null` is cleared - except
+        `name`, which the web rules require. `UpdateContact` completes the request with the
+        contact's current values and runs the result through the rules `POST` uses, so the
+        change is validated as the web edit form validates it; only the fields actually sent
+        are written.
+
+        - **`roles` is only touched when it is sent.** The web edit form always posts the
+          complete form and detaches every active group missing from `roles[]`. Sent, `roles`
+          is the complete set; `[]` or `null` removes every group the API can give.
+        - **Groups the API cannot give are never taken away** - inactive ones, or of a type
+          that is not configured - and may be sent back as they are, so a `GET` can be PATCHed
+          back unchanged.
+        - **`custid` moves the contact** to another member, as the web edit form does for
+          superusers. The contact takes its groups along and needs room in each limited one at
+          the new member, otherwise `422` under `custid`; the web checks only groups an edit
+          adds.
+        - `creator` is kept; the editor is recorded in `lastupdatedby`. The web overwrites
+          `creator` with the editor's username on every edit.
+        - A change of roles alone moves `updated_at` and sets `lastupdatedby`; the web leaves the
+          contact row alone then. A PATCH which matches what is stored writes nothing.
+
+        The contact and the member it ends up with are locked for the transaction, so that
+        group limits hold against concurrent requests through this API.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ContactUpdate'
+            examples:
+              phone:
+                summary: change the phone number, nothing else - roles included
+                value:
+                  phone: '+49 69 7654321'
+              roles:
+                summary: replace the roles
+                value:
+                  roles: [ 2, 3 ]
+              move:
+                summary: move the contact to another member
+                value:
+                  custid: 98
+      responses:
+        '200':
+          description: The contact after the change, and what actually changed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContactUpdateResult'
+              example:
+                contact:
+                  id: 42
+                  custid: 97
+                  name: Erika Mustermann
+                  position: Head of Network Operations
+                  email: erika@example.net
+                  phone: '+49 69 7654321'
+                  mobile: '+49 170 1234567'
+                  notes: Prefers email.
+                  roles:
+                    - id: 1
+                      name: Billing
+                      type: ROLE
+                  created_at: '2026-11-24T20:15:02+00:00'
+                  updated_at: '2026-11-24T21:40:11+00:00'
+                changed: [ phone ]
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: |
+            A group link this request adds was written by a change made in the web UI at the
+            same moment - the API serialises its own changes of a contact, the web takes no
+            lock. The transaction was rolled back; read the contact again and retry.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                message: >-
+                  Another request changed the roles of this contact at the same time. Nothing was
+                  changed. Read the contact again and retry.
+        '422':
+          description: |
+            The completed record failed validation, a role cannot be given (see `POST`), a group
+            the contact would join is full, or the contact cannot move because a group it takes
+            along is full at the new member. Nothing is written.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+              examples:
+                nameCleared:
+                  summary: the name cannot be cleared
+                  value:
+                    message: The name field is required.
+                    errors:
+                      name:
+                        - The name field is required.
+                moveIntoFullGroup:
+                  summary: a moved contact's group is full at the new member
+                  value:
+                    message: >-
+                      Contact group ROLE: Billing has a limited membership and is full (1 of 1
+                      for this member). Nothing was changed.
+                    errors:
+                      custid:
+                        - >-
+                          Contact group ROLE: Billing has a limited membership and is full (1 of
+                          1 for this member). Nothing was changed.
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    delete:
+      tags: [ Contacts ]
+      operationId: deleteContact
+      summary: Delete a contact
+      description: |
+        Deletes the contact's group links and the contact in one transaction, under the
+        contact's row lock. The links have to go first: `contact_to_group` references the
+        contact without `ON DELETE CASCADE`. The groups themselves are not touched.
+
+        Not itself idempotent: deleting the same contact twice gives `200` and then `404`.
+      responses:
+        '200':
+          description: The contact was deleted.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ deleted ]
+                properties:
+                  deleted:
+                    type: boolean
+                    const: true
+              example:
+                deleted: true
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+components:
+
+  schemas:
+
+    Contact:
+      type: object
+      title: Contact
+      description: |
+        A contact as this API reports it - the explicit field list of
+        `ContactPresenter::toArray()`, not the model's `toArray()`. `creator` and
+        `lastupdatedby` are bookkeeping and left out, as they are for members.
+
+        `notes` is internal: the web UI shows it to superusers only, never to the member's own
+        users. A calling system with a member portal should keep it that way.
+      required: [ id, custid, name, position, email, phone, mobile, notes, roles, created_at, updated_at ]
+      properties:
+        id:
+          type: integer
+        custid:
+          type: [ integer, 'null' ]
+          description: The member (`cust.id`) the contact belongs to.
+        name:
+          type: string
+        position:
+          type: [ string, 'null' ]
+        email:
+          type: [ string, 'null' ]
+        phone:
+          type: [ string, 'null' ]
+        mobile:
+          type: [ string, 'null' ]
+        notes:
+          type: [ string, 'null' ]
+        roles:
+          type: array
+          description: |
+            Every contact group of the contact, of whatever type, ordered by name. The ids can
+            be sent back unchanged as `roles` in a PATCH.
+          items:
+            $ref: '#/components/schemas/ContactRole'
+        created_at:
+          type: [ string, 'null' ]
+          format: date-time
+          description: ISO 8601. Null for contacts created before IXP Manager recorded it.
+        updated_at:
+          type: [ string, 'null' ]
+          format: date-time
+          description: |
+            ISO 8601. Moves with every change made through this API, a change of roles alone
+            included; changes of roles made in the web UI do not move it.
+
+    ContactRole:
+      type: object
+      title: ContactRole
+      description: A contact group as a contact's `roles` list shows it - `ContactGroupPresenter::summary()`.
+      required: [ id, name, type ]
+      properties:
+        id:
+          type: integer
+          description: '`contact_group.id`.'
+        name:
+          type: string
+        type:
+          type: string
+          description: The group type, a key of `contact_group.types` such as `ROLE`.
+
+    ContactGroup:
+      type: object
+      title: ContactGroup
+      description: A contact group as `GET /contact-group` lists it - `ContactGroupPresenter::toArray()`.
+      required: [ id, name, description, type, active, limited_to, created_at, updated_at ]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+          description: Unique across all contact groups, for example `Billing`.
+        description:
+          type: string
+        type:
+          type: string
+          description: A key of `contact_group.types` in `config/contact_group.php`, such as `ROLE`.
+        active:
+          type: boolean
+          description: Only active groups can be given to a contact.
+        limited_to:
+          type: integer
+          minimum: 0
+          description: |
+            The most contacts of one member the group may hold; `0` means unlimited. Checked
+            before a contact is written.
+        created_at:
+          type: [ string, 'null' ]
+          format: date-time
+        updated_at:
+          type: [ string, 'null' ]
+          format: date-time
+
+    ContactGroupList:
+      type: object
+      title: ContactGroupList
+      required: [ enabled, contact_groups ]
+      properties:
+        enabled:
+          type: boolean
+          description: |
+            Whether contacts can be given contact groups at all: `config/contact_group.php`
+            exists and defines the `ROLE` type - the switch the web contact pages use. When
+            false, `contact_groups` is empty and any role sent with a contact is `422`.
+        contact_groups:
+          type: array
+          items:
+            $ref: '#/components/schemas/ContactGroup'
+
+    ContactInput:
+      type: object
+      title: ContactInput
+      description: |
+        The body of `POST /member/{cust}/contact`.
+
+        Validated by `StoreContact`: the rules of the web's inline
+        `ContactController::checkForm()` for a superuser, reproduced, plus `roles`.
+        `ContactParityTest` holds the copy to the original. Unknown fields are dropped.
+      required: [ name ]
+      properties:
+        name:
+          type: string
+          maxLength: 255
+        position:
+          type: [ string, 'null' ]
+          maxLength: 255
+          description: |
+            The web rule accepts up to 255 characters, but the `contact.position` column is
+            `varchar(50)` and the database connection runs with strict mode off: on v7.4
+            anything beyond 50 characters is **silently cut to 50**. Send at most 50.
+        email:
+          type: [ string, 'null' ]
+          format: email
+          description: |
+            Validated without a length limit, as on the web; the column is `varchar(255)` and
+            cuts anything longer.
+        phone:
+          type: [ string, 'null' ]
+          maxLength: 50
+        mobile:
+          type: [ string, 'null' ]
+          maxLength: 50
+        notes:
+          type: [ string, 'null' ]
+          maxLength: 255
+          description: Internal notes; see `Contact`.
+        roles:
+          type: [ array, 'null' ]
+          uniqueItems: true
+          description: |
+            The contact's contact groups, as ids from `GET /contact-group` - the ROLE type and
+            any other configured type alike, as the web form posts them in `roles[]`. Each must
+            name an active group of a configured type with room for another contact of the
+            member. Duplicates are `422`. Left out or `null`, the contact has no groups.
+          items:
+            type: integer
+        custid:
+          type: integer
+          description: '**Ignored** at `POST`: the member comes from the route.'
+
+    ContactUpdate:
+      type: object
+      title: ContactUpdate
+      description: |
+        The body of `PATCH /contact/{contact}`: any subset of `ContactInput`'s fields, plus
+        `custid`. Nothing is required. A field left out keeps its value; a field sent as `null`
+        is cleared, except `name`. The definitions are `ContactInput`'s.
+      properties:
+        name:
+          $ref: '#/components/schemas/ContactInput/properties/name'
+        position:
+          $ref: '#/components/schemas/ContactInput/properties/position'
+        email:
+          $ref: '#/components/schemas/ContactInput/properties/email'
+        phone:
+          $ref: '#/components/schemas/ContactInput/properties/phone'
+        mobile:
+          $ref: '#/components/schemas/ContactInput/properties/mobile'
+        notes:
+          $ref: '#/components/schemas/ContactInput/properties/notes'
+        roles:
+          type: [ array, 'null' ]
+          uniqueItems: true
+          description: |
+            The complete set of the contact's groups; only touched when sent. `[]` or `null`
+            removes every group the API can give. Groups it cannot give - inactive, or of a type
+            not configured - are kept, and may be included unchanged. A group added must be
+            active, of a configured type, and have room for another contact of the member.
+          items:
+            type: integer
+        custid:
+          type: integer
+          description: |
+            Moves the contact to this member. Must exist (`422` otherwise), and every limited
+            group the contact takes along must have room there (`422` under `custid` otherwise).
+
+    ContactUpdateResult:
+      type: object
+      title: ContactUpdateResult
+      required: [ contact, changed ]
+      properties:
+        contact:
+          $ref: '#/components/schemas/Contact'
+        changed:
+          type: array
+          items:
+            type: string
+          description: |
+            The columns which actually changed, in table order, and `roles` when the contact's
+            groups changed - empty when the PATCH matched what was stored. `updated_at` and
+            `lastupdatedby` are not listed.
