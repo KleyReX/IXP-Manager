@@ -37,8 +37,10 @@ use IXP\Models\VlanInterface;
  * copy of something upstream.
  *
  * Free means: the address row exists in the pool for this VLAN and no VlanInterface points at
- * it. Addresses are created ahead of time (see the ipv4/ipv6 address generator commands), so
- * allocation never mints a new address - it only claims an existing, unclaimed one.
+ * it. Addresses are added to a pool ahead of time, by an operator in the web UI's IP address
+ * pages (IpAddressController::store(), which adds a whole network at once) - IXP Manager has no
+ * command for it - so allocation never mints a new address: it only claims an existing,
+ * unclaimed one.
  *
  * Changing an existing VLAN interface adds one exception: the addresses that interface holds
  * itself are not taken from its point of view. claim() accepts the interface as `$except` for
