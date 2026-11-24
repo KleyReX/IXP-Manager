@@ -22,6 +22,7 @@ namespace IXP\Http\Controllers\Api\V4\Provisioning;
  * http://www.gnu.org/licenses/gpl-2.0.html
  */
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -32,15 +33,23 @@ use IXP\Models\Infrastructure;
 use IXP\Models\SwitchPort;
 use IXP\Models\Switcher;
 
+use IXP\Support\Provisioning\Presenters\InfrastructurePresenter;
+use IXP\Support\Provisioning\Presenters\SwitchPresenter;
+
 /**
  * Provisioning API - Port Controller
  *
- * Finds switch ports which are free to be assigned to a member.
+ * Finds switch ports which are free to be assigned to a member, and lists the switches and
+ * infrastructures a caller needs to place such an order.
  *
  * The web UI answers this question one switch at a time, because an operator has already
  * picked the switch from a dropdown. An ordering system has not: it knows the infrastructure
  * and the speed it sold, and needs to be told where that fits. This walks every active switch
  * and returns the candidates.
+ *
+ * The switch and infrastructure listings are built by SwitchPresenter and
+ * InfrastructurePresenter. Fields and filters added to them since the first release are
+ * additive: the defaults, names and formats existing callers rely on have not changed.
  *
  * Read-only, so a GET is correct here.
  *
@@ -128,19 +137,40 @@ class PortController extends Controller
     }
 
     /**
-     * List the active switches, so a caller can resolve names to ids without guessing.
+     * List the switches, so a caller can resolve names to ids without guessing.
+     *
+     * Without parameters this lists the active switches only, exactly as it always has: those
+     * are the ones whose ports can be ordered. The filters are additive:
+     *
+     *   active          1 (the default), 0 for the inactive switches, or `all`
+     *   infrastructure  restrict to one infrastructure id
+     *
+     * `active=0` exists so that a caller can see a switch it has just taken out of service - the
+     * default listing simply stops showing it, which is indistinguishable from it being deleted.
+     * A NULL in the column counts as inactive, as it does for port/free and for orders, so every
+     * switch appears under exactly one of `active=1` and `active=0`.
+     *
+     * @param  Request  $r
      *
      * @return JsonResponse
      */
-    public function switches(): JsonResponse
+    public function switches( Request $r ): JsonResponse
     {
-        $switches = Switcher::where( 'active', true )->orderBy( 'name' )->get()
-            ->map( fn( Switcher $s ) => [
-                'id'                => $s->id,
-                'name'              => $s->name,
-                'infrastructure'    => $s->infrastructure,
-                'hostname'          => $s->hostname,
-            ] )->values()->all();
+        $validated = $r->validate( [
+            'active'         => 'nullable|string|in:all,0,1',
+            'infrastructure' => 'nullable|integer|exists:infrastructure,id',
+        ] );
+
+        $active = $validated[ 'active' ] ?? '1';
+
+        $switches = Switcher::with( 'cabinet' )
+            ->when( $active === '1', fn( Builder $q ) => $q->where( 'active', true ) )
+            ->when( $active === '0', fn( Builder $q ) => $q->where( fn( Builder $q ) => $q->where( 'active', false )->orWhereNull( 'active' ) ) )
+            ->when( isset( $validated[ 'infrastructure' ] ), fn( Builder $q ) => $q->where( 'infrastructure', $validated[ 'infrastructure' ] ) )
+            ->orderBy( 'name' )
+            ->get()
+            ->map( fn( Switcher $s ) => SwitchPresenter::toArray( $s ) )
+            ->values()->all();
 
         return response()->json( [ 'switches' => $switches ] );
     }
@@ -148,31 +178,18 @@ class PortController extends Controller
     /**
      * List the infrastructures and their VLANs, which a caller needs before requesting a port.
      *
+     * The VLANs are eager loaded - this used to be one query per infrastructure - and kept in
+     * id order, which is the order they arrived in before.
+     *
      * @return JsonResponse
      */
     public function infrastructures(): JsonResponse
     {
-        $infras = [];
-
-        foreach( Infrastructure::orderBy( 'name' )->get() as $infra ) {
-            $vlans = [];
-
-            foreach( $infra->vlans as $vlan ) {
-                $vlans[] = [
-                    'id'     => $vlan->id,
-                    'name'   => $vlan->name,
-                    'number' => $vlan->number,
-                ];
-            }
-
-            $infras[] = [
-                'id'        => $infra->id,
-                'name'      => $infra->name,
-                'shortname' => $infra->shortname,
-                'isPrimary' => (bool)$infra->isPrimary,
-                'vlans'     => $vlans,
-            ];
-        }
+        $infras = Infrastructure::with( [ 'vlans' => fn( $q ) => $q->orderBy( 'id' ) ] )
+            ->orderBy( 'name' )
+            ->get()
+            ->map( fn( Infrastructure $i ) => InfrastructurePresenter::toArray( $i ) )
+            ->values()->all();
 
         return response()->json( [ 'infrastructures' => $infras ] );
     }

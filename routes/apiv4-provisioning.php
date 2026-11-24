@@ -135,4 +135,14 @@ Route::delete( 'mac/{l2a}',                      'MacAddressController@destroy' 
 
 
 // ---- wave 1: reference data ---------------------------------------------
+Route::get(  'vlan',                        'VlanController@index'          )->name( 'api-v4-provisioning@vlans'               );
+Route::get(  'vlan/{vlan}',                 'VlanController@show'           )->name( 'api-v4-provisioning@vlan-show'           );
+Route::get(  'irrdb-source',                'IrrdbSourceController@index'   )->name( 'api-v4-provisioning@irrdb-sources'       );
+Route::post( 'irrdb-source',                'IrrdbSourceController@store'   )->name( 'api-v4-provisioning@irrdb-source-store'  );
+Route::get(  'irrdb-source/{irrdbconfig}',  'IrrdbSourceController@show'    )->name( 'api-v4-provisioning@irrdb-source-show'   );
+Route::get(  'facility',                    'FacilityController@index'      )->name( 'api-v4-provisioning@facilities'          );
+Route::get(  'facility/{location}',         'FacilityController@show'       )->name( 'api-v4-provisioning@facility-show'       );
+Route::get(  'rack',                        'RackController@index'          )->name( 'api-v4-provisioning@racks'               );
+Route::get(  'rack/{cabinet}',              'RackController@show'           )->name( 'api-v4-provisioning@rack-show'           );
+Route::get(  'vendor',                      'VendorController@index'        )->name( 'api-v4-provisioning@vendors'             );
 
