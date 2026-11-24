@@ -85,6 +85,17 @@ Route::post( 'onboarding', 'OnboardingController@store' )
 
 
 // ---- wave 1: users ------------------------------------------------------
+Route::get(    'user',                       'PortalUserController@index'        )->name( 'api-v4-provisioning@user-index'         );
+Route::get(    'user/{u}',                   'PortalUserController@show'         )->name( 'api-v4-provisioning@user-show'          );
+Route::patch(  'user/{u}',                   'PortalUserController@update'       )->name( 'api-v4-provisioning@user-update'        );
+Route::delete( 'user/{u}',                   'PortalUserController@destroy'      )->name( 'api-v4-provisioning@user-destroy'       );
+Route::post(   'user/{u}/welcome-email',     'PortalUserController@welcomeEmail' )->name( 'api-v4-provisioning@user-welcome-email' );
+
+Route::get(    'member/{cust}/user',         'PortalUserController@memberIndex'  )->name( 'api-v4-provisioning@member-user-index'  );
+Route::get(    'member/{cust}/user/{u}',     'PortalUserController@memberShow'   )->name( 'api-v4-provisioning@member-user-show'   );
+Route::post(   'member/{cust}/user/{u}',     'PortalUserController@storeLink'    )->name( 'api-v4-provisioning@member-user-link'   );
+Route::patch(  'member/{cust}/user/{u}',     'PortalUserController@updateLink'   )->name( 'api-v4-provisioning@member-user-update' );
+Route::delete( 'member/{cust}/user/{u}',     'PortalUserController@destroyLink'  )->name( 'api-v4-provisioning@member-user-unlink' );
 
 
 
