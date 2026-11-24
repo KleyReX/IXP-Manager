@@ -77,6 +77,9 @@ Route::post( 'onboarding', 'OnboardingController@store' )
 */
 
 // ---- wave 1: members ----------------------------------------------------
+Route::get(   'member',                             'MemberController@listCustomers'       )->name( 'api-v4-provisioning@member-index'                       );
+Route::get(   'member/{cust}/billing-registration', 'BillingRegistrationController@show'   )->name( 'api-v4-provisioning@member-billing-registration-show'   );
+Route::patch( 'member/{cust}/billing-registration', 'BillingRegistrationController@update' )->name( 'api-v4-provisioning@member-billing-registration-update' );
 
 
 

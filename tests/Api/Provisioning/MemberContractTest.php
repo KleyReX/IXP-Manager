@@ -337,6 +337,10 @@ class MemberContractTest extends TestCase
 
     /**
      * Reading a member back must work and must not leak unrelated columns.
+     *
+     * `creator` used to serve as the example of an unlisted column; it is part of the
+     * representation now (see MemberPresenterTest), so the internal foreign keys and the
+     * unmanaged legacy fax column stand in for it.
      */
     public function testShowMember(): void
     {
@@ -352,7 +356,9 @@ class MemberContractTest extends TestCase
         $response->assertStatus( 200 );
         $response->assertJsonPath( 'member.id', $cust->id );
         $response->assertJsonPath( 'member.shortname', 'provtestshw' );
-        $response->assertJsonMissingPath( 'member.creator' );
+        $response->assertJsonMissingPath( 'member.company_billing_details_id' );
+        $response->assertJsonMissingPath( 'member.company_registered_detail_id' );
+        $response->assertJsonMissingPath( 'member.nocfax' );
     }
 
     /**
