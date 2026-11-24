@@ -22,12 +22,14 @@ namespace IXP\Http\Middleware\Provisioning;
  * http://www.gnu.org/licenses/gpl-2.0.html
  */
 
-use Auth, Closure;
+use Closure;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 
 use IXP\Models\ApiKey;
+
+use IXP\Support\Provisioning\ApiKeyResolver;
 
 /**
  * Middleware: RestrictSourceAddress
@@ -94,21 +96,7 @@ class RestrictSourceAddress
      */
     private function apiKey(): ?ApiKey
     {
-        if( !Auth::check() || !( $token = request()->header( 'X-IXP-Manager-API-Key' ) ) ) {
-            return null;
-        }
-
-        // Modern keys: match on the identifier rather than the secret, which is stored hashed.
-        if( str_starts_with( $token, ApiKey::PREFIX ) ) {
-            $parts = explode( '_', $token );
-
-            return isset( $parts[ 1 ] )
-                ? ApiKey::where( 'token_identifier', $parts[ 1 ] )->first()
-                : null;
-        }
-
-        // Legacy keys: ApiAuthenticate matches these on the stored value itself.
-        return ApiKey::where( 'api_key', $token )->first();
+        return ApiKeyResolver::fromRequest( request() );
     }
 
     /**

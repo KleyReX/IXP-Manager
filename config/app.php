@@ -219,6 +219,7 @@ return [
         IXP\Providers\TelescopeServiceProvider::class,
         IXP\Providers\RouteServiceProvider::class,
         IXP\Providers\ProvisioningRouteServiceProvider::class,
+        IXP\Providers\WebhookServiceProvider::class,
 
         IXP\Providers\HelpdeskServiceProvider::class,
         IXP\Providers\GrapherServiceProvider::class,

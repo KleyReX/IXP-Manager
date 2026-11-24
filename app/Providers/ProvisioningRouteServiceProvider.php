@@ -26,6 +26,7 @@ use Illuminate\Foundation\Support\Providers\RouteServiceProvider as ServiceProvi
 use Illuminate\Support\Facades\Route;
 
 use IXP\Http\Middleware\Provisioning\ForceJsonResponse;
+use IXP\Http\Middleware\Provisioning\RecordWebhookOrigin;
 use IXP\Http\Middleware\Provisioning\RequireApiKey;
 use IXP\Http\Middleware\Provisioning\RestrictSourceAddress;
 use IXP\Models\User;
@@ -147,7 +148,10 @@ class ProvisioningRouteServiceProvider extends ServiceProvider
      *
      * RequireApiKey comes before `api/v4` so that a browser session is rejected before
      * ApiAuthenticate has a chance to accept it. RestrictSourceAddress comes after, because
-     * it needs the resolved key to read that key's own allow-list.
+     * it needs the resolved key to read that key's own allow-list. RecordWebhookOrigin comes
+     * last of the four, so that only an authenticated, permitted request stamps its origin on
+     * the outgoing webhooks - and after `api/v4`'s SubstituteBindings, so that the models of the
+     * route are resolved when it touches them.
      *
      * @return array<int,string>
      */
@@ -159,6 +163,7 @@ class ProvisioningRouteServiceProvider extends ServiceProvider
             'api/v4',
             'assert.privilege:' . User::AUTH_SUPERUSER,
             RestrictSourceAddress::class,
+            RecordWebhookOrigin::class,
         ];
 
         if( ( $limit = config( "ixp_api.provisioning.rate_limit", 60 ) ) > 0 ) {
