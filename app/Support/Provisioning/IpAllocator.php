@@ -25,6 +25,7 @@ namespace IXP\Support\Provisioning;
 use IXP\Models\IPv4Address;
 use IXP\Models\IPv6Address;
 use IXP\Models\Vlan;
+use IXP\Models\VlanInterface;
 
 /**
  * Allocates the next free address from a VLAN's peering pool.
@@ -38,6 +39,11 @@ use IXP\Models\Vlan;
  * Free means: the address row exists in the pool for this VLAN and no VlanInterface points at
  * it. Addresses are created ahead of time (see the ipv4/ipv6 address generator commands), so
  * allocation never mints a new address - it only claims an existing, unclaimed one.
+ *
+ * Changing an existing VLAN interface adds one exception: the addresses that interface holds
+ * itself are not taken from its point of view. claim() accepts the interface as `$except` for
+ * that, because a PATCH which repeats an interface's current address - or a retried one - is
+ * not a request for an address somebody else has.
  *
  * Concurrency: two orders being provisioned at the same moment must not receive the same
  * address. Selecting with a row lock inside the caller's transaction is what prevents that;
@@ -87,15 +93,29 @@ class IpAllocator
      * or the literal string "auto", which takes the next free one. Anything else, including
      * an address belonging to a different VLAN, is a caller error.
      *
-     * @param  Vlan         $vlan
-     * @param  string|null  $requested  an address, "auto", or null for no address at all
-     * @param  bool         $ipv6
+     * `$except` is the VLAN interface the address is being claimed for, when that interface
+     * exists already. Its own addresses then count as free for it:
+     *
+     *   - an explicit request for the address it holds is accepted rather than refused as
+     *     "already assigned", so that a PATCH can name the current address, and
+     *   - "auto" returns the address it already holds in this VLAN instead of allocating a
+     *     second one. "auto" asks for an address, not for a different one; renumbering is done
+     *     by naming the new address. This also keeps a retried PATCH from walking through the
+     *     pool, one address per attempt.
+     *
+     * An address the interface holds in another VLAN is no help to it - that is the case of an
+     * interface moving to a new VLAN - and is neither accepted nor returned.
+     *
+     * @param  Vlan                $vlan
+     * @param  string|null         $requested  an address, "auto", or null for no address at all
+     * @param  bool                $ipv6
+     * @param  VlanInterface|null  $except     the existing interface the address is for, if any
      *
      * @return IPv4Address|IPv6Address|null
      *
      * @throws IpAllocationException
      */
-    public function claim( Vlan $vlan, ?string $requested, bool $ipv6 = false ): IPv4Address|IPv6Address|null
+    public function claim( Vlan $vlan, ?string $requested, bool $ipv6 = false, ?VlanInterface $except = null ): IPv4Address|IPv6Address|null
     {
         $requested = $requested === null ? null : trim( $requested );
 
@@ -106,6 +126,10 @@ class IpAllocator
         $proto = $ipv6 ? 'IPv6' : 'IPv4';
 
         if( strtolower( $requested ) === 'auto' ) {
+            if( $except && ( $held = $this->heldIn( $vlan, $except, $ipv6 ) ) ) {
+                return $held;
+            }
+
             if( !( $ip = $this->nextFree( $vlan, $ipv6 ) ) ) {
                 throw new IpAllocationException(
                     "No free {$proto} address left in VLAN {$vlan->name} (id {$vlan->id})."
@@ -115,22 +139,47 @@ class IpAllocator
             return $ip;
         }
 
-        return $this->claimExplicit( $vlan, $requested, $ipv6, $proto );
+        return $this->claimExplicit( $vlan, $requested, $ipv6, $proto, $except );
+    }
+
+    /**
+     * The address of the given protocol which a VLAN interface holds in this VLAN, locked.
+     *
+     * @param  Vlan           $vlan
+     * @param  VlanInterface  $vli
+     * @param  bool           $ipv6
+     *
+     * @return IPv4Address|IPv6Address|null
+     */
+    private function heldIn( Vlan $vlan, VlanInterface $vli, bool $ipv6 ): IPv4Address|IPv6Address|null
+    {
+        /** @var class-string<IPv4Address|IPv6Address> $model */
+        $model = $ipv6 ? IPv6Address::class : IPv4Address::class;
+
+        if( !( $id = $ipv6 ? $vli->ipv6addressid : $vli->ipv4addressid ) ) {
+            return null;
+        }
+
+        return $model::whereKey( $id )
+            ->where( 'vlanid', $vlan->id )
+            ->lockForUpdate()
+            ->first();
     }
 
     /**
      * Claim a specific address from the VLAN's pool.
      *
-     * @param  Vlan    $vlan
-     * @param  string  $address
-     * @param  bool    $ipv6
-     * @param  string  $proto
+     * @param  Vlan                $vlan
+     * @param  string              $address
+     * @param  bool                $ipv6
+     * @param  string              $proto
+     * @param  VlanInterface|null  $except  an interface whose own address counts as free
      *
      * @return IPv4Address|IPv6Address
      *
      * @throws IpAllocationException
      */
-    private function claimExplicit( Vlan $vlan, string $address, bool $ipv6, string $proto ): IPv4Address|IPv6Address
+    private function claimExplicit( Vlan $vlan, string $address, bool $ipv6, string $proto, ?VlanInterface $except = null ): IPv4Address|IPv6Address
     {
         /** @var class-string<IPv4Address|IPv6Address> $model */
         $model = $ipv6 ? IPv6Address::class : IPv4Address::class;
@@ -157,7 +206,7 @@ class IpAllocator
             );
         }
 
-        if( $ip->vlanInterface ) {
+        if( ( $holder = $ip->vlanInterface ) && !( $except && (int)$holder->id === (int)$except->id ) ) {
             throw new IpAllocationException(
                 "{$proto} address {$address} is already assigned to another VLAN interface."
             );

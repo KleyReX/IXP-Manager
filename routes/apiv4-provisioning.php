@@ -93,6 +93,15 @@ Route::post( 'onboarding', 'OnboardingController@store' )
 
 
 // ---- wave 1: vlan interfaces and MAC addresses ---------------------------
+Route::post(   'connection/{vi}/vlan-interface', 'VlanInterfaceController@store'   )->name( 'api-v4-provisioning@vlan-interface-store'   );
+Route::get(    'vlan-interface/{vli}',           'VlanInterfaceController@show'    )->name( 'api-v4-provisioning@vlan-interface-show'    );
+Route::patch(  'vlan-interface/{vli}',           'VlanInterfaceController@update'  )->name( 'api-v4-provisioning@vlan-interface-update'  );
+Route::delete( 'vlan-interface/{vli}',           'VlanInterfaceController@destroy' )->name( 'api-v4-provisioning@vlan-interface-destroy' );
+
+Route::get(    'vlan-interface/{vli}/mac',       'MacAddressController@index'      )->name( 'api-v4-provisioning@mac-index'              );
+Route::post(   'vlan-interface/{vli}/mac',       'MacAddressController@store'      )->name( 'api-v4-provisioning@mac-store'              );
+Route::get(    'mac',                            'MacAddressController@lookup'     )->name( 'api-v4-provisioning@mac-lookup'             );
+Route::delete( 'mac/{l2a}',                      'MacAddressController@destroy'    )->name( 'api-v4-provisioning@mac-destroy'            );
 
 
 
