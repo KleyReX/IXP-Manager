@@ -110,9 +110,10 @@ addresses, `?protocol=4` or `6` to one family.
 ## Members
 
 ```http
-POST /admin/api/v4/provisioning/member
-GET  /admin/api/v4/provisioning/member/{cust}
-POST /admin/api/v4/provisioning/member/{cust}/user
+POST  /admin/api/v4/provisioning/member
+GET   /admin/api/v4/provisioning/member/{cust}
+PATCH /admin/api/v4/provisioning/member/{cust}
+POST  /admin/api/v4/provisioning/member/{cust}/user
 ```
 
 The member payload is validated with the same rules as the web form, plus a small addition —
@@ -137,6 +138,30 @@ see *Validation* below.
 
 `PeeringDB` lookup remains available at the existing endpoint
 `GET /admin/api/v4/customer/query-peeringdb/asn/{asn}` and is a useful way to pre-fill this.
+
+### Changing a member
+
+`PATCH /member/{cust}` takes any subset of the member's fields — the ones `POST /member` takes,
+plus `peeringdb_oauth`. A field that is left out keeps its value; a field sent as `null` is
+cleared. Setting a leave date is therefore just:
+
+```json
+{ "dateleave": "2026-11-01" }
+```
+
+The change is validated as the web edit form validates it: the request is completed with the
+member's current values and the result runs through the same rules. One deliberate leniency:
+a field which is empty today and not sent is not filled in, so a member whose `nocemail` or
+`peeringpolicy` was never set — which the web form would insist on — can still be given a leave
+date. A value that is sent, or already stored, is validated in full.
+
+The response is the member as `GET /member/{cust}` returns it, plus `changed`: the attributes
+which actually changed, empty if the PATCH matched what was stored. Fields outside the edit form
+(`id`, `creator`, the company detail ids, ...) are ignored.
+
+`GET /member/{cust}` and the responses of `POST` and `PATCH` include the NOC fields, `corpwww`,
+`MD5Support`, `activepeeringmatrix`, `peeringdb_oauth` and `updated_at` as well, so that
+everything a PATCH can change can also be read back.
 
 Creating a user sends the welcome email carrying the password reset link — without it the
 account cannot be used. The customer comes from the route, so a `custid` in the body is
@@ -275,7 +300,7 @@ naming the resource that is now taken.
 ## Machine-readable specification
 
 `docs/provisioning-api.openapi.yaml` — OpenAPI 3.1, hand written, no generator package and no
-build step. 11 paths, 22 schemas, every field derived from the controllers and the merged
+build step. 11 paths, 24 schemas, every field derived from the controllers and the merged
 validation rules rather than from this prose.
 
 Worth knowing when reading it: a taken switch port answers `422`, not `409`. `409` arises only
