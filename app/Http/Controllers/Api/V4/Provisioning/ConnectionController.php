@@ -26,11 +26,17 @@ use Auth, Log;
 
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Database\UniqueConstraintViolationException;
 
+use IXP\Http\Controllers\Api\V4\Provisioning\Concerns\LagBookkeeping;
 use IXP\Http\Controllers\Interfaces\Common;
-use IXP\Http\Requests\Api\V4\Provisioning\StoreConnection;
+
+use IXP\Http\Requests\Api\V4\Provisioning\{
+    StoreConnection,
+    UpdateConnection
+};
 
 use IXP\Models\{
     Customer,
@@ -41,6 +47,7 @@ use IXP\Models\{
     VlanInterface
 };
 
+use IXP\Support\Provisioning\ConnectionConflict;
 use IXP\Support\Provisioning\IpAllocationException;
 use IXP\Support\Provisioning\IpAllocator;
 use IXP\Support\Provisioning\Presenters\ConnectionPresenter;
@@ -48,16 +55,19 @@ use IXP\Support\Provisioning\Presenters\ConnectionPresenter;
 /**
  * Provisioning API - Connection Controller
  *
- * Creates and removes a member's connection to the exchange: the virtual interface, the
- * physical interface on a switch port, the VLAN interface, and the addresses on it.
+ * Creates, reads, changes and removes a member's connection to the exchange: the virtual
+ * interface, the physical interface on a switch port, the VLAN interface, and the addresses
+ * on it. Physical interfaces added to or taken from an existing connection are
+ * PhysicalInterfaceController's.
  *
  * Extends Interfaces\Common rather than Api\V4\Controller, which is the point of the class:
- * setIp() and deletePi() are inherited, so the address assignment and the fanout-aware
- * teardown exist once in the codebase and keep working when upstream changes them. What is
- * reimplemented here is only the orchestration that VirtualInterfaceController::storeWizard()
- * wraps in redirects and flash messages.
+ * setIp(), setBundleDetails() and deletePi() are inherited, so the address assignment, the LAG
+ * bookkeeping and the fanout-aware teardown exist once in the codebase and keep working when
+ * upstream changes them. What is reimplemented here is only the orchestration that
+ * VirtualInterfaceController wraps in redirects and flash messages.
  *
  * @see \IXP\Http\Controllers\Interfaces\VirtualInterfaceController::storeWizard()
+ * @see \IXP\Http\Controllers\Interfaces\VirtualInterfaceController::update()
  *
  * @author     KleyReX
  * @category   APIv4
@@ -67,6 +77,14 @@ use IXP\Support\Provisioning\Presenters\ConnectionPresenter;
  */
 class ConnectionController extends Common
 {
+    use LagBookkeeping;
+
+    /**
+     * Default and maximum page size of the connection list.
+     */
+    private const int LIST_LIMIT     = 100;
+    private const int LIST_LIMIT_MAX = 1000;
+
     /**
      * Create a connection for a member.
      *
@@ -174,7 +192,8 @@ class ConnectionController extends Common
     /**
      * List a member's connections.
      *
-     * In ConnectionPresenter's summary shape, which this endpoint has always returned.
+     * In ConnectionPresenter's summary shape, which this endpoint has always returned. The
+     * connection list and connection/{vi} return the fuller one.
      *
      * @param  Customer  $cust
      *
@@ -189,6 +208,172 @@ class ConnectionController extends Common
             ->values()->all();
 
         return response()->json( [ 'connections' => $connections ] );
+    }
+
+    /**
+     * List connections, across members.
+     *
+     * What an external system needs to reconcile its copy with this one: every connection,
+     * or those of one member, on one switch, in one VLAN, or with a physical interface in one
+     * status (all ports awaiting a cross-connect, say), a page at a time. The web list is a
+     * GROUP_CONCAT summary built for a table, not a shape to hand out.
+     *
+     * Query parameters, all optional: member, switch, vlan, status, limit (default 100, at
+     * most 1000) and offset. A filter naming something which does not exist is a 422, as on
+     * port/free, rather than an empty page which looks like an answer. Ordered by id, so that
+     * pages are stable while nothing is created.
+     *
+     * @param  Request  $r
+     *
+     * @return JsonResponse
+     */
+    public function list( Request $r ): JsonResponse
+    {
+        $filters = $r->validate( [
+            'member'    => 'nullable|integer|exists:cust,id',
+            'switch'    => 'nullable|integer|exists:switch,id',
+            'vlan'      => 'nullable|integer|exists:vlan,id',
+            'status'    => 'nullable|integer|in:' . implode( ',', array_keys( PhysicalInterface::$STATES ) ),
+            'limit'     => 'nullable|integer|min:1|max:' . self::LIST_LIMIT_MAX,
+            'offset'    => 'nullable|integer|min:0',
+        ] );
+
+        $limit  = (int)( $filters[ 'limit' ]  ?? self::LIST_LIMIT );
+        $offset = (int)( $filters[ 'offset' ] ?? 0 );
+
+        $query = VirtualInterface::query()
+            ->when( isset( $filters[ 'member' ] ), fn( $q ) => $q->where( 'custid', $filters[ 'member' ] ) )
+            ->when( isset( $filters[ 'switch' ] ), fn( $q ) => $q->whereHas( 'physicalInterfaces.switchPort',
+                fn( $q ) => $q->where( 'switchid', $filters[ 'switch' ] )
+            ) )
+            ->when( isset( $filters[ 'vlan' ] ), fn( $q ) => $q->whereHas( 'vlanInterfaces',
+                fn( $q ) => $q->where( 'vlanid', $filters[ 'vlan' ] )
+            ) )
+            ->when( isset( $filters[ 'status' ] ), fn( $q ) => $q->whereHas( 'physicalInterfaces',
+                fn( $q ) => $q->where( 'status', $filters[ 'status' ] )
+            ) );
+
+        $total = ( clone $query )->count();
+
+        $connections = $query->with( ConnectionPresenter::RELATIONS )
+            ->orderBy( 'id' )
+            ->offset( $offset )
+            ->limit( $limit )
+            ->get()
+            ->map( fn( VirtualInterface $vi ) => ConnectionPresenter::toArray( $vi ) )
+            ->values()->all();
+
+        return response()->json( [
+            'connections'   => $connections,
+            'count'         => count( $connections ),
+            'total'         => $total,
+            'limit'         => $limit,
+            'offset'        => $offset,
+        ] );
+    }
+
+    /**
+     * Read a connection.
+     *
+     * @param  VirtualInterface  $vi
+     *
+     * @return JsonResponse
+     */
+    public function show( VirtualInterface $vi ): JsonResponse
+    {
+        return response()->json( [ 'connection' => ConnectionPresenter::toArray( $vi->load( ConnectionPresenter::RELATIONS ) ) ] );
+    }
+
+    /**
+     * Change a connection's settings: name, description, MTU, 802.1Q trunk, channel group,
+     * LAG framing and fast LACP.
+     *
+     * Mirrors VirtualInterfaceController@update. UpdateConnection validates the change as the
+     * web edit form would; this method applies the rules that controller applies inline, in
+     * the same order:
+     *
+     *   - surrounding double quotes are stripped from the name (:274). The edit form wraps a
+     *     name with trailing whitespace in them so that it survives TrimStrings, which runs
+     *     here too, so a caller has the same way to keep it;
+     *   - a channel group cannot be removed from a connection with more than one physical
+     *     interface (:281-284) - the web says so and changes nothing, this answers 409;
+     *   - setBundleDetails() and the save, then validateChannelGroup() unless the connection
+     *     has a single port, no LAG framing and no channel group (:287-309) - a clash rolls
+     *     back, 409 here.
+     *
+     * Deliberately stricter than the web:
+     *
+     *   - A connection which belongs to a core bundle is refused. Both ends of a core bundle
+     *     must match, and the core bundle's own edit changes them together.
+     *   - LAG framing cannot be switched off while the connection has more than one physical
+     *     interface. The switch configuration export renders only the first port of a
+     *     connection without it, and IXP Manager's own diagnostics call that state an error.
+     *   - A null channel group is never handed to validateChannelGroup(), which throws on one:
+     *     the web edit form fails with a 500 on a legacy connection with several ports, no LAG
+     *     framing and no channel group.
+     *
+     * Only the fields the caller sent are written. The response names the attributes which
+     * actually changed - including those setBundleDetails() filled in, a channel group
+     * assigned because LAG framing was switched on, say.
+     *
+     * @param  UpdateConnection  $r
+     * @param  VirtualInterface  $vi
+     *
+     * @return JsonResponse
+     */
+    public function update( UpdateConnection $r, VirtualInterface $vi ): JsonResponse
+    {
+        if( $vi->getCoreBundle() ) {
+            return response()->json( [
+                'message' => 'This connection belongs to a core bundle. Change it through the core bundle, which keeps '
+                    . 'both ends alike.',
+            ], 409 );
+        }
+
+        $input = Arr::only( $r->validated(), $r->sent() );
+
+        if( isset( $input[ 'name' ] ) && is_string( $input[ 'name' ] ) ) {
+            $input[ 'name' ] = trim( $input[ 'name' ], '"' );
+        }
+
+        $switchIds = self::switchIdsOf( $vi );
+
+        try {
+            DB::transaction( function() use ( $vi, $input, $switchIds ) {
+                $this->lockConnection( $vi, $switchIds );
+                $vi->refresh();
+
+                $pis = $vi->physicalInterfaces()->count();
+
+                if( $pis > 1 && $vi->channelgroup && array_key_exists( 'channelgroup', $input ) && !$input[ 'channelgroup' ] ) {
+                    throw new ConnectionConflict( 'A channel group cannot be removed from a connection with more than one '
+                        . 'physical interface. Nothing was changed.' );
+                }
+
+                if( $pis > 1 && $vi->lag_framing && array_key_exists( 'lag_framing', $input ) && !$input[ 'lag_framing' ] ) {
+                    throw new ConnectionConflict( 'LAG framing cannot be switched off while the connection has more than one '
+                        . 'physical interface: the switch configuration would carry only the first of them. Remove the '
+                        . 'other physical interfaces first. Nothing was changed.' );
+                }
+
+                $vi->fill( $input );
+                $this->settleLag( $vi );
+            }, attempts: 3 );
+        } catch( ConnectionConflict $e ) {
+            return response()->json( [ 'message' => $e->getMessage() ], 409 );
+        }
+
+        $changed = array_values( array_diff( array_keys( $vi->getChanges() ), [ 'updated_at' ] ) );
+
+        if( $changed ) {
+            Log::notice( "Provisioning API: changed connection {$vi->id} for " . ( $vi->customer?->name ?? 'unknown' )
+                . ': ' . implode( ', ', $changed ) . ' as ' . Auth::user()->username );
+        }
+
+        return response()->json( [
+            'connection'    => ConnectionPresenter::toArray( $vi->fresh( ConnectionPresenter::RELATIONS ) ),
+            'changed'       => $changed,
+        ] );
     }
 
     /**

@@ -89,6 +89,15 @@ Route::post( 'onboarding', 'OnboardingController@store' )
 
 
 // ---- wave 1: connections and physical interfaces -----------------------
+Route::get(    'connection',                            'ConnectionController@list'         )->name( 'api-v4-provisioning@connection-list'           );
+Route::get(    'connection/{vi}',                       'ConnectionController@show'         )->name( 'api-v4-provisioning@connection-show'           );
+Route::patch(  'connection/{vi}',                       'ConnectionController@update'       )->name( 'api-v4-provisioning@connection-update'         );
+Route::post(   'connection/{vi}/physical-interface',    'PhysicalInterfaceController@store' )->name( 'api-v4-provisioning@physical-interface-store'  );
+
+Route::get(    'physical-interface/{pi}',               'PhysicalInterfaceController@show'    )->name( 'api-v4-provisioning@physical-interface-show'    );
+Route::patch(  'physical-interface/{pi}',               'PhysicalInterfaceController@update'  )->name( 'api-v4-provisioning@physical-interface-update'  );
+Route::post(   'physical-interface/{pi}/move',          'PhysicalInterfaceController@move'    )->name( 'api-v4-provisioning@physical-interface-move'    );
+Route::delete( 'physical-interface/{pi}',               'PhysicalInterfaceController@destroy' )->name( 'api-v4-provisioning@physical-interface-destroy' );
 
 
 
