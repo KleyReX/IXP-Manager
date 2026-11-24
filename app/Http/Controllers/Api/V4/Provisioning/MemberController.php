@@ -25,8 +25,8 @@ namespace IXP\Http\Controllers\Api\V4\Provisioning;
 use Auth, Cache, Hash, Log;
 
 use Carbon\Carbon;
-use DateTimeInterface;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -36,6 +36,7 @@ use IXP\Events\User\UserCreated as UserCreatedEvent;
 use IXP\Http\Controllers\Api\V4\Controller;
 
 use IXP\Http\Requests\Api\V4\Provisioning\{
+    ListCustomers,
     StoreCustomer,
     StoreUser,
     UpdateCustomer
@@ -49,10 +50,12 @@ use IXP\Models\{
     User
 };
 
+use IXP\Support\Provisioning\Presenters\MemberPresenter;
+
 /**
  * Provisioning API - Member Controller
  *
- * Creates and changes members (customers) and creates their portal users.
+ * Lists, creates and changes members (customers) and creates their portal users.
  *
  * The store and update methods mirror the web controllers rather than calling them: those
  * return redirects and push flash messages, neither of which a machine caller can use. What
@@ -60,6 +63,10 @@ use IXP\Models\{
  * MemberUpdateTest assert directly by sending the same data to both entry points and diffing
  * the rows.
  *
+ * Every member in a response is MemberPresenter's representation, so that a member reads the
+ * same whether it was just created, changed, fetched or listed.
+ *
+ * @see \IXP\Http\Controllers\Customer\CustomerController::list()    the web equivalent
  * @see \IXP\Http\Controllers\Customer\CustomerController::store()   the web equivalent
  * @see \IXP\Http\Controllers\Customer\CustomerController::update()  the web equivalent
  * @see \IXP\Http\Controllers\User\UserController::store()           the web equivalent
@@ -73,11 +80,70 @@ use IXP\Models\{
 class MemberController extends Controller
 {
     /**
+     * List members.
+     *
+     * The admin list's filters - status, type, current only, tag - plus the lookups an
+     * external system needs to map its records to members: AS number, shortname, a name
+     * search, reseller and a change cursor (`updated_since`). Ordered by id, so that paging
+     * with limit/offset is stable while members are added; `total` counts every match, not
+     * just the page.
+     *
+     * `current` reuses Customer::SQL_CUST_CURRENT, the definition the configuration exports
+     * use, and `current=0` is its exact complement: `IS NOT TRUE` also catches a member whose
+     * join date is NULL, for which the expression is NULL rather than false.
+     *
+     * @param  ListCustomers  $r
+     *
+     * @return JsonResponse
+     */
+    public function listCustomers( ListCustomers $r ): JsonResponse
+    {
+        $query = Customer::query()
+            ->when( $r->filled( 'status' ), fn( Builder $q ) => $q->where( 'cust.status', $r->integer( 'status' ) ) )
+            ->when( $r->filled( 'type' ),   fn( Builder $q ) => $q->where( 'cust.type', $r->integer( 'type' ) ) )
+            ->when( $r->filled( 'current' ), fn( Builder $q ) => $r->boolean( 'current' )
+                ? $q->whereRaw( Customer::SQL_CUST_CURRENT )
+                : $q->whereRaw( '( ' . Customer::SQL_CUST_CURRENT . ' ) IS NOT TRUE' ) )
+            ->when( $r->filled( 'autsys' ),    fn( Builder $q ) => $q->where( 'cust.autsys', $r->integer( 'autsys' ) ) )
+            ->when( $r->filled( 'shortname' ), fn( Builder $q ) => $q->where( 'cust.shortname', $r->string( 'shortname' )->toString() ) )
+            ->when( $r->filled( 'q' ), function( Builder $q ) use ( $r ) {
+                $like = '%' . self::escapeLike( $r->string( 'q' )->toString() ) . '%';
+
+                return $q->where( fn( Builder $w ) => $w->where( 'cust.name', 'like', $like )
+                    ->orWhere( 'cust.shortname', 'like', $like ) );
+            } )
+            ->when( $r->filled( 'reseller' ), fn( Builder $q ) => $q->where( 'cust.reseller', $r->integer( 'reseller' ) ) )
+            ->when( $r->filled( 'tag' ), fn( Builder $q ) => $q->whereHas( 'tags',
+                fn( Builder $t ) => $t->where( 'cust_tag.id', $r->integer( 'tag' ) ) ) )
+            ->when( $r->filled( 'updated_since' ), fn( Builder $q ) => $q->where( 'cust.updated_at', '>=',
+                // updated_at is stored as local time in app.timezone without an offset, and a
+                // DateTime binding is formatted without converting it - so convert first, or a
+                // caller sending UTC is off by the server's offset:
+                Carbon::parse( $r->string( 'updated_since' )->toString() )->setTimezone( config( 'app.timezone' ) ) ) );
+
+        $total = ( clone $query )->count();
+
+        $members = MemberPresenter::withIsCurrent( $query )
+            ->orderBy( 'cust.id' )
+            ->offset( $r->pageOffset() )
+            ->limit( $r->pageLimit() )
+            ->get()
+            ->map( fn( Customer $c ) => MemberPresenter::toArray( $c ) )
+            ->values()->all();
+
+        return response()->json( [ 'members' => $members, 'total' => $total ] );
+    }
+
+    /**
      * Create a member.
      *
      * Mirrors CustomerController@store, including the two detail records it creates
      * alongside the customer, and wraps the three inserts in a transaction - the web path
      * does not, so a failure there can leave orphaned detail rows behind.
+     *
+     * The response is built from the row as stored, not from the model the insert returned:
+     * that model holds only what was sent, so a column the caller left to its database default
+     * - peeringdb_oauth, which defaults to 1 - would be reported as false.
      *
      * @param  StoreCustomer  $r
      *
@@ -102,7 +168,7 @@ class MemberController extends Controller
         Log::notice( 'Provisioning API: created ' . config( 'ixp_fe.lang.customer.one' )
             . " {$cust->name} (id {$cust->id}) as " . Auth::user()->username );
 
-        return response()->json( [ 'member' => $this->memberAsArray( $cust ) ], 201 );
+        return response()->json( [ 'member' => MemberPresenter::toArray( $cust->refresh() ) ], 201 );
     }
 
     /**
@@ -114,7 +180,7 @@ class MemberController extends Controller
      */
     public function showCustomer( Customer $cust ): JsonResponse
     {
-        return response()->json( [ 'member' => $this->memberAsArray( $cust ) ] );
+        return response()->json( [ 'member' => MemberPresenter::toArray( $cust ) ] );
     }
 
     /**
@@ -146,7 +212,7 @@ class MemberController extends Controller
                 . " {$cust->name} (id {$cust->id}): " . implode( ', ', $changed ) . ' as ' . Auth::user()->username );
         }
 
-        return response()->json( [ 'member' => $this->memberAsArray( $cust->refresh() ), 'changed' => $changed ] );
+        return response()->json( [ 'member' => MemberPresenter::toArray( $cust->refresh() ), 'changed' => $changed ] );
     }
 
     /**
@@ -202,69 +268,17 @@ class MemberController extends Controller
     }
 
     /**
-     * Representation of a member for API responses.
+     * Escape the LIKE wildcards in a search term, so that `q=a_b` finds "a_b" and not "axb".
      *
-     * Deliberately an explicit field list rather than the model's toArray(): the response
-     * shape is a contract with the caller and should not change because a column was added.
+     * MySQL's default LIKE escape character is the backslash, which therefore goes first.
      *
-     * @param  Customer  $cust
+     * @param  string  $term
      *
-     * @return array
+     * @return string
      */
-    private function memberAsArray( Customer $cust ): array
+    private static function escapeLike( string $term ): string
     {
-        return [
-            'id'                => $cust->id,
-            'name'              => $cust->name,
-            'shortname'         => $cust->shortname,
-            'abbreviatedName'   => $cust->abbreviatedName,
-            'type'              => $cust->type,
-            'status'            => $cust->status,
-            'autsys'            => $cust->autsys,
-            'maxprefixes'       => $cust->maxprefixes,
-            'maxprefixesv6'     => $cust->maxprefixesv6,
-            'peeringemail'      => $cust->peeringemail,
-            'peeringmacro'      => $cust->peeringmacro,
-            'peeringmacrov6'    => $cust->peeringmacrov6,
-            'peeringpolicy'     => $cust->peeringpolicy,
-            'irrdb'             => $cust->irrdb,
-            'datejoin'          => $this->asDate( $cust->datejoin ),
-            'dateleave'         => $this->asDate( $cust->dateleave ),
-            'reseller'          => $cust->reseller,
-            'isReseller'        => (bool)$cust->isReseller,
-            'corpwww'           => $cust->corpwww,
-            'nocphone'          => $cust->nocphone,
-            'noc24hphone'       => $cust->noc24hphone,
-            'nocemail'          => $cust->nocemail,
-            'nochours'          => $cust->nochours,
-            'nocwww'            => $cust->nocwww,
-            'MD5Support'        => $cust->MD5Support,
-            'activepeeringmatrix' => (bool)$cust->activepeeringmatrix,
-            'peeringdb_oauth'   => (bool)$cust->peeringdb_oauth,
-            'updated_at'        => $cust->updated_at?->toIso8601String(),
-        ];
-    }
-
-    /**
-     * Normalise a date attribute to Y-m-d for API responses.
-     *
-     * Customer declares datejoin/dateleave in $dates, which Laravel no longer honours - the
-     * attributes therefore arrive as raw strings, not Carbon instances. Accept either, so
-     * that this keeps working if upstream moves them to $casts.
-     *
-     * @param  mixed  $value
-     *
-     * @return string|null
-     */
-    private function asDate( mixed $value ): ?string
-    {
-        if( $value === null || $value === '' ) {
-            return null;
-        }
-
-        return $value instanceof DateTimeInterface
-            ? $value->format( 'Y-m-d' )
-            : Carbon::parse( $value )->format( 'Y-m-d' );
+        return str_replace( [ '\\', '%', '_' ], [ '\\\\', '\\%', '\\_' ], $term );
     }
 
     /**
