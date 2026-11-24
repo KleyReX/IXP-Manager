@@ -30,7 +30,10 @@ use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Database\UniqueConstraintViolationException;
 
-use IXP\Http\Controllers\Api\V4\Provisioning\Concerns\LagBookkeeping;
+use IXP\Http\Controllers\Api\V4\Provisioning\Concerns\{
+    LagBookkeeping,
+    TearsDownConnections
+};
 use IXP\Http\Controllers\Interfaces\Common;
 
 use IXP\Http\Requests\Api\V4\Provisioning\{
@@ -78,6 +81,7 @@ use IXP\Support\Provisioning\Presenters\ConnectionPresenter;
 class ConnectionController extends Common
 {
     use LagBookkeeping;
+    use TearsDownConnections;
 
     /**
      * Default and maximum page size of the connection list.
@@ -379,9 +383,11 @@ class ConnectionController extends Common
     /**
      * Remove a connection.
      *
-     * Uses the inherited deletePi(), which handles the fanout and reseller cases. That method
-     * is not idempotent - it dereferences $pi->switchPort after having set switchportid to
-     * null - so a physical interface already detached is skipped rather than passed to it.
+     * The teardown is TearsDownConnections::tearDownConnection(), which POST
+     * member/{cust}/offboard uses for every connection of a member: the inherited, fanout-aware
+     * deletePi() for the physical interfaces, then the VLAN interfaces with their MACs, the
+     * discovered MACs and the virtual interface. What it reports as removed is not part of this
+     * endpoint's answer.
      *
      * @param  VirtualInterface  $vi
      *
@@ -396,27 +402,8 @@ class ConnectionController extends Common
         }
 
         $custName = $vi->customer?->name ?? 'unknown';
-        $request  = Request::create( '/', 'POST' );
 
-        DB::transaction( function() use ( $vi, $request ) {
-            foreach( $vi->physicalInterfaces as $pi ) {
-                if( $pi->switchportid === null ) {
-                    // already detached: deletePi() would fail on a null switch port
-                    $pi->delete();
-                    continue;
-                }
-
-                $this->deletePi( $request, $pi, false );
-            }
-
-            foreach( $vi->vlanInterfaces as $vli ) {
-                $vli->layer2addresses()->delete();
-                $vli->delete();
-            }
-
-            $vi->macAddresses()->delete();
-            $vi->delete();
-        } );
+        DB::transaction( fn() => $this->tearDownConnection( $vi ) );
 
         Log::notice( "Provisioning API: deleted connection {$vi->id} for {$custName} as "
             . Auth::user()->username );
