@@ -1,0 +1,1013 @@
+# Fragment of docs/provisioning-api.openapi.yaml, work package "connections and physical
+# interfaces" (wave 1). Merge `paths` into the document's paths - /connection/{vi} already has a
+# `delete` operation there, which stays beside the `get` and `patch` below - and
+# `components.schemas` into its schemas. The $refs to parameters, responses and schemas which
+# are not defined here (VirtualInterfaceId, Unauthorized, Forbidden, NotFound, TooManyRequests,
+# Error, ValidationError, Connection, ConnectionPhysicalInterface) point at the existing
+# document. All operations use the existing `Connections` tag.
+
+paths:
+
+  /connection:
+    get:
+      tags: [ Connections ]
+      operationId: listConnections
+      summary: List connections across members
+      description: |
+        Connections a page at a time, in id order, in the representation of
+        `GET /connection/{vi}`. What an external system needs to reconcile its copy: every
+        connection, or those of one member, on one switch, in one VLAN, or with a physical
+        interface in one status. Filters are optional and combine.
+
+        A filter naming something which does not exist is a `422`, as on `port/free`, rather
+        than an empty page which looks like an answer. Core bundle connections are listed too;
+        their ports have `switchport_type` 3. Relations are eager loaded, so a page is a fixed
+        number of queries.
+      parameters:
+        - name: member
+          in: query
+          required: false
+          description: Only the connections of this member (`cust.id`).
+          schema:
+            type: integer
+            minimum: 1
+          example: 97
+        - name: switch
+          in: query
+          required: false
+          description: Only connections with a physical interface on a port of this switch.
+          schema:
+            type: integer
+            minimum: 1
+          example: 13
+        - name: vlan
+          in: query
+          required: false
+          description: Only connections with a VLAN interface in this VLAN (`vlan.id`, not the tag).
+          schema:
+            type: integer
+            minimum: 1
+          example: 1
+        - name: status
+          in: query
+          required: false
+          description: |
+            Only connections with a physical interface in this status: `1` Connected,
+            `2` Disabled, `3` Not Connected, `4` Awaiting X-Connect, `5` Quarantine.
+          schema:
+            type: integer
+            enum: [ 1, 2, 3, 4, 5 ]
+          example: 4
+        - name: limit
+          in: query
+          required: false
+          description: Page size.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+            default: 100
+        - name: offset
+          in: query
+          required: false
+          description: Connections to skip, in id order.
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        '200':
+          description: One page of connections.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConnectionList'
+              example:
+                connections:
+                  - id: 501
+                    custid: 97
+                    name: ae
+                    description: Example Networks GmbH primary
+                    mtu: null
+                    trunk: false
+                    lag_framing: true
+                    fastlacp: true
+                    channelgroup: 4
+                    physical_interfaces:
+                      - id: 733
+                        status: 4
+                        speed: 10000
+                        duplex: full
+                        rate_limit: null
+                        autoneg: true
+                        switchport: 412
+                        switchport_name: xe-0/0/9
+                        switch: 13
+                        switch_name: vc513
+                        connection: 501
+                        switchport_type: 1
+                        notes: cross-connect ordered
+                    vlan_interfaces:
+                      - id: 688
+                        vlan: 1
+                        ipv4enabled: true
+                        ipv4address: 193.189.82.101
+                        ipv4hostname: examplenet.kleyrex.net
+                        ipv6enabled: true
+                        ipv6address: '2001:7f8:33::a101:2586:1'
+                        ipv6hostname: examplenet.kleyrex.net
+                        rsclient: true
+                        irrdbfilter: true
+                        as112client: false
+                        maxbgpprefix:
+                          ipv4: 500
+                          ipv6: 500
+                count: 1
+                total: 1
+                limit: 50
+                offset: 0
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          description: A filter is malformed or names something which does not exist.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+              example:
+                message: The selected member is invalid.
+                errors:
+                  member:
+                    - The selected member is invalid.
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /connection/{vi}:
+    parameters:
+      - $ref: '#/components/parameters/VirtualInterfaceId'
+    get:
+      tags: [ Connections ]
+      operationId: showConnection
+      summary: Read a connection
+      description: |
+        The connection with everything `PATCH /connection/{vi}` can change. A superset of the
+        representation `POST` and `GET /member/{cust}/connection` return - every field of that
+        is here with the same value - plus `description`, `mtu` and `fastlacp`, and the physical
+        interfaces in the fuller shape of `GET /physical-interface/{pi}`. The member-scoped
+        endpoints keep their shape byte for byte.
+      responses:
+        '200':
+          description: The connection.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ connection ]
+                properties:
+                  connection:
+                    $ref: '#/components/schemas/ConnectionDetail'
+              example:
+                connection:
+                  id: 501
+                  custid: 97
+                  name: ae
+                  description: Example Networks GmbH primary
+                  mtu: null
+                  trunk: false
+                  lag_framing: true
+                  fastlacp: true
+                  channelgroup: 4
+                  physical_interfaces:
+                    - id: 733
+                      status: 1
+                      speed: 10000
+                      duplex: full
+                      rate_limit: null
+                      autoneg: true
+                      switchport: 412
+                      switchport_name: xe-0/0/9
+                      switch: 13
+                      switch_name: vc513
+                      connection: 501
+                      switchport_type: 1
+                      notes: null
+                  vlan_interfaces:
+                    - id: 688
+                      vlan: 1
+                      ipv4enabled: true
+                      ipv4address: 193.189.82.101
+                      ipv4hostname: examplenet.kleyrex.net
+                      ipv6enabled: false
+                      ipv6address: null
+                      ipv6hostname: null
+                      rsclient: true
+                      irrdbfilter: true
+                      as112client: false
+                      maxbgpprefix:
+                        ipv4: 500
+                        ipv6: null
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    patch:
+      tags: [ Connections ]
+      operationId: updateConnection
+      summary: Change a connection's settings
+      description: |
+        Changes any subset of `name`, `description`, `mtu`, `trunk`, `channelgroup`,
+        `lag_framing` and `fastlacp`. A field that is left out keeps its value; a field sent as
+        `null` is cleared. Only the fields sent are written.
+
+        Validated as the web edit form of a virtual interface validates it: `UpdateConnection`
+        extends `StoreVirtualInterface`, completes the request with the connection's current
+        values and adds `trunk`, `lag_framing` and `fastlacp` - which the web form posts but
+        never validates - as a delta, held to the web rules by `InterfaceParityTest`. Then the
+        rules `VirtualInterfaceController@update` applies inline, in its order:
+
+        - surrounding double quotes are stripped from `name`, which is how the web form keeps
+          trailing whitespace through TrimStrings;
+        - a channel group cannot be removed from a connection with more than one physical
+          interface (`409`);
+        - `setBundleDetails()` - switching LAG framing on assigns a channel group no other
+          connection on the switch uses, and the vendor's bundle name when the connection has
+          none - then the channel group is validated as unique on the switch (`409`, rolled
+          back). A null channel group is not validated: the web's validator throws on one.
+
+        Stricter than the web, each `409`: LAG framing cannot be switched off while the
+        connection has more than one physical interface - the switch configuration export
+        renders only the first port of a connection without it - and a connection of a core
+        bundle is not changed here.
+
+        `custid` and every field not listed above are ignored. The transaction locks the rows
+        of the connection's switches and then the connection, so two requests cannot pick the
+        same channel group on one switch.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConnectionUpdate'
+            examples:
+              lagFraming:
+                summary: make a single port a LAG, ready for a second member
+                value:
+                  lag_framing: true
+                  fastlacp: true
+              description:
+                summary: change the description only
+                value:
+                  description: Example Networks GmbH primary
+              trailingSpace:
+                summary: a name with trailing whitespace, quoted as the web form does it
+                value:
+                  name: '"ae0 "'
+      responses:
+        '200':
+          description: The connection after the change, and the attributes which actually changed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConnectionUpdateResult'
+              example:
+                connection:
+                  id: 501
+                  custid: 97
+                  name: null
+                  description: null
+                  mtu: null
+                  trunk: false
+                  lag_framing: true
+                  fastlacp: true
+                  channelgroup: 4
+                  physical_interfaces:
+                    - id: 733
+                      status: 1
+                      speed: 10000
+                      duplex: full
+                      rate_limit: null
+                      autoneg: true
+                      switchport: 412
+                      switchport_name: xe-0/0/9
+                      switch: 13
+                      switch_name: vc513
+                      connection: 501
+                      switchport_type: 1
+                      notes: null
+                  vlan_interfaces: []
+                changed: [ channelgroup, lag_framing, fastlacp ]
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: The connection's state refuses the change. Nothing was written.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                channelGroupInUse:
+                  summary: another connection on the switch uses the channel group
+                  value:
+                    message: Channel group 1 is already used by another connection on the same switch. Nothing was changed.
+                channelGroupRemoved:
+                  summary: removing the channel group of a LAG with several ports
+                  value:
+                    message: A channel group cannot be removed from a connection with more than one physical interface. Nothing was changed.
+                lagFramingOff:
+                  summary: switching LAG framing off with several ports
+                  value:
+                    message: >-
+                      LAG framing cannot be switched off while the connection has more than one
+                      physical interface: the switch configuration would carry only the first of
+                      them. Remove the other physical interfaces first. Nothing was changed.
+                coreBundle:
+                  summary: a connection of a core bundle
+                  value:
+                    message: This connection belongs to a core bundle. Change it through the core bundle, which keeps both ends alike.
+        '422':
+          description: The completed record failed validation. Nothing was written.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+              example:
+                message: The mtu must be at least 1.
+                errors:
+                  mtu:
+                    - The mtu must be at least 1.
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /connection/{vi}/physical-interface:
+    parameters:
+      - $ref: '#/components/parameters/VirtualInterfaceId'
+    post:
+      tags: [ Connections ]
+      operationId: addPhysicalInterface
+      summary: Add a physical interface to a connection
+      description: |
+        Adds a port to an existing connection - in practice a further LAG member. Validated by
+        `StorePhysicalInterface`, which extends the web request of the same name with `autoneg`
+        as its delta. `status` defaults to connected and `duplex` to full; `speed` is required.
+
+        Refused where the web accepts:
+
+        - the switch port does not exist, belongs to another switch than `switch`, already has a
+          physical interface, is on an inactive switch, or is not of type unset or peering -
+          `422`, as for `POST /member/{cust}/connection`;
+        - the port is on another switch than the connection's other ports - `422`, a LAG cannot
+          span switches;
+        - the connection already has a port and is not LAG framed - `409`: the switch
+          configuration of a connection without LAG framing carries only its first port. Switch
+          LAG framing on with `PATCH /connection/{vi}` first;
+        - the connection belongs to a core bundle - `409`.
+
+        The LAG settings are worked out after the new port exists, in the same transaction - the
+        web does it before. The port's type becomes peering, or reseller if the connection's
+        first port is a reseller port. The reseller fanout fields (`fanout`, `switch-fanout`,
+        `switch-port-fanout`) are not supported and are ignored.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PhysicalInterfaceInput'
+            example:
+              switch: 13
+              switchportid: 413
+              speed: 10000
+      responses:
+        '201':
+          description: The physical interface was added.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ physical_interface ]
+                properties:
+                  physical_interface:
+                    $ref: '#/components/schemas/PhysicalInterface'
+              example:
+                physical_interface:
+                  id: 734
+                  status: 1
+                  speed: 10000
+                  duplex: full
+                  rate_limit: null
+                  autoneg: true
+                  switchport: 413
+                  switchport_name: xe-0/0/10
+                  switch: 13
+                  switch_name: vc513
+                  connection: 501
+                  switchport_type: 1
+                  notes: null
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: |
+            The connection's state refuses another port, or another request took the switch port
+            between the check and the insert. Nothing was created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                notLagFramed:
+                  summary: a second port on a connection without LAG framing
+                  value:
+                    message: >-
+                      This connection is not LAG framed, and the switch configuration carries only
+                      the first port of a connection without LAG framing. Switch LAG framing on with
+                      PATCH connection/501 first. Nothing was created.
+                raced:
+                  summary: the port was taken by a concurrent request
+                  value:
+                    message: Another request took switch port xe-0/0/10 while this one was being processed. Nothing was created.
+        '422':
+          description: |
+            Either the payload failed validation (`message` and `errors`), or the switch port
+            cannot be used (`message` only). Nothing was written.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/ValidationError'
+                  - $ref: '#/components/schemas/Error'
+              examples:
+                speedMissing:
+                  summary: no speed - validation
+                  value:
+                    message: The speed field is required.
+                    errors:
+                      speed:
+                        - The speed field is required.
+                otherSwitch:
+                  summary: a port on another switch than the LAG's
+                  value:
+                    message: Switch port xe-0/0/10 is on another switch than the other physical interfaces of this connection. A LAG cannot span switches.
+                portTaken:
+                  summary: switch port already assigned
+                  value:
+                    message: Switch port xe-0/0/10 is already assigned to another connection.
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /physical-interface/{pi}:
+    parameters:
+      - name: pi
+        in: path
+        required: true
+        description: |
+          The `physicalinterface.id`, as listed in a connection's `physical_interfaces`.
+          Resolved by route model binding, so an unknown id is `404`.
+        schema:
+          type: integer
+          minimum: 1
+        example: 733
+    get:
+      tags: [ Connections ]
+      operationId: showPhysicalInterface
+      summary: Read a physical interface
+      responses:
+        '200':
+          description: The physical interface.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ physical_interface ]
+                properties:
+                  physical_interface:
+                    $ref: '#/components/schemas/PhysicalInterface'
+              example:
+                physical_interface:
+                  id: 733
+                  status: 1
+                  speed: 10000
+                  duplex: full
+                  rate_limit: null
+                  autoneg: true
+                  switchport: 412
+                  switchport_name: xe-0/0/9
+                  switch: 13
+                  switch_name: vc513
+                  connection: 501
+                  switchport_type: 1
+                  notes: null
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    patch:
+      tags: [ Connections ]
+      operationId: updatePhysicalInterface
+      summary: Change a physical interface
+      description: |
+        Changes any subset of `status`, `speed`, `duplex`, `rate_limit`, `autoneg` and `notes`,
+        with the semantics of `PATCH /connection/{vi}`: left out keeps, `null` clears, only the
+        fields sent are written. A `rate_limit` of `0` is stored as none, as on the web. A
+        physical interface has no description - its free text is `notes`.
+
+        Validated by `UpdatePhysicalInterface` with the web form's rules. The switch, the port
+        and the connection are filled in from the record and never changed here, whatever the
+        body says - that is `/move`.
+
+        `processFanoutPhysicalInterface()` is never called: the web edit calls it on every save
+        and, without a `fanout` field, it deletes the related reseller fanout interface (and the
+        reseller's fanout connection, with its VLAN interfaces and MAC addresses, when that was
+        its only port). A fanout link survives here, and the fanout port follows a new speed,
+        status or duplex, as on the web. Interfaces on fanout ports and in core links are
+        refused with `409`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PhysicalInterfaceUpdate'
+            examples:
+              disable:
+                summary: take the port down
+                value:
+                  status: 2
+              rateLimit:
+                summary: rate limit the port, and note why
+                value:
+                  rate_limit: 1000
+                  notes: 1G committed on a 10G port
+      responses:
+        '200':
+          description: The physical interface after the change, and the attributes which actually changed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PhysicalInterfaceUpdateResult'
+              example:
+                physical_interface:
+                  id: 733
+                  status: 2
+                  speed: 10000
+                  duplex: full
+                  rate_limit: null
+                  autoneg: true
+                  switchport: 412
+                  switchport_name: xe-0/0/9
+                  switch: 13
+                  switch_name: vc513
+                  connection: 501
+                  switchport_type: 1
+                  notes: null
+                changed: [ status ]
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: The interface is on a fanout port or in a core link. Nothing was written.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                fanout:
+                  summary: an interface on a reseller fanout port
+                  value:
+                    message: This physical interface is on a reseller fanout port. Change the peering interface it belongs to; the fanout port follows it.
+                coreLink:
+                  summary: an interface in a core link
+                  value:
+                    message: This physical interface belongs to a core link. Change it through its core bundle.
+        '422':
+          description: The completed record failed validation. Nothing was written.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+              example:
+                message: The selected speed is invalid.
+                errors:
+                  speed:
+                    - The selected speed is invalid.
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    delete:
+      tags: [ Connections ]
+      operationId: deletePhysicalInterface
+      summary: Remove a physical interface from a connection
+      description: |
+        Removes one port of a connection - never the last one: a connection without a physical
+        interface keeps its addresses but appears in no switch configuration. The web allows it;
+        here it is a `409`, and `DELETE /connection/{vi}` removes the whole connection. The count
+        is taken with the connection locked, so two requests cannot each remove one of the last
+        two.
+
+        The removal is the inherited `deletePi()`, fanout-aware and without the web's `related`
+        option: a reseller's fanout interface is unlinked and its port returned to peering, not
+        deleted. The connection's LAG settings are saved afterwards - `deletePi()` works them out
+        but never saves them. An interface in a core link is refused with `409`, as on the web.
+
+        Not idempotent: removing the same interface twice gives `200`, then `404`.
+      responses:
+        '200':
+          description: The physical interface was removed.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ deleted ]
+                properties:
+                  deleted:
+                    type: boolean
+                    const: true
+              example:
+                deleted: true
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: The last physical interface of its connection, or one in a core link. Nothing was deleted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                last:
+                  summary: the connection's last physical interface
+                  value:
+                    message: This is the last physical interface of connection 501. Delete the connection instead (DELETE connection/501). Nothing was deleted.
+                coreLink:
+                  summary: an interface in a core link
+                  value:
+                    message: This physical interface belongs to a core link. Remove it through its core bundle.
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /physical-interface/{pi}/move:
+    parameters:
+      - name: pi
+        in: path
+        required: true
+        description: |
+          The `physicalinterface.id`. Resolved by route model binding, so an unknown id is `404`.
+        schema:
+          type: integer
+          minimum: 1
+        example: 733
+    post:
+      tags: [ Connections ]
+      operationId: movePhysicalInterface
+      summary: Move a physical interface to another switch port
+      description: |
+        Moves the interface to the port named by `switch` and `switchportid`, and changes any
+        field `PATCH` changes in the same step - moving to a port of another speed is the usual
+        reason to move, and doing both at once means no configuration is ever generated for a
+        10G setting on a 100G port.
+
+        On the web a move is a side effect of the edit form, which checks nothing about the
+        target: a taken port ends in a `500` on the unique index. Here the target passes the
+        gate of `POST /member/{cust}/connection` (`422`), a LAG member stays on the switch of the
+        LAG's other members (`422`), and the connection's channel group is validated again on the
+        new switch, which may already use it (`409`, rolled back). Asking for the port the
+        interface is already on moves nothing.
+
+        The new port becomes a peering port, or a reseller port if the old one was. The old port
+        keeps its type, as on the web, and is free for the next order. Interfaces on fanout ports
+        and in core links are refused with `409`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PhysicalInterfaceMove'
+            examples:
+              move:
+                summary: another port on the same switch
+                value:
+                  switch: 13
+                  switchportid: 414
+              upgrade:
+                summary: a faster port, and the speed with it
+                value:
+                  switch: 13
+                  switchportid: 420
+                  speed: 100000
+      responses:
+        '200':
+          description: |
+            The physical interface after the move, and the attributes which actually changed -
+            `switchportid` and whatever else changed, or nothing for its own port.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PhysicalInterfaceUpdateResult'
+              example:
+                physical_interface:
+                  id: 733
+                  status: 1
+                  speed: 100000
+                  duplex: full
+                  rate_limit: null
+                  autoneg: true
+                  switchport: 420
+                  switchport_name: et-0/0/20
+                  switch: 13
+                  switch_name: vc513
+                  connection: 501
+                  switchport_type: 1
+                  notes: null
+                changed: [ switchportid, speed ]
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: |
+            The channel group is in use on the new switch, the port was taken by a concurrent
+            request, or the interface is on a fanout port or in a core link. Nothing was moved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              examples:
+                channelGroup:
+                  summary: the new switch already uses the connection's channel group
+                  value:
+                    message: Channel group 2 is already used by another connection on the same switch. Nothing was changed.
+                raced:
+                  summary: the port was taken by a concurrent request
+                  value:
+                    message: Another request took switch port et-0/0/20 while this one was being processed. Nothing was moved.
+        '422':
+          description: |
+            Either the payload failed validation (`message` and `errors`), or the target port
+            cannot be used (`message` only). Nothing was written.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/ValidationError'
+                  - $ref: '#/components/schemas/Error'
+              examples:
+                noTarget:
+                  summary: no switch port named - validation
+                  value:
+                    message: The switch field is required. (and 1 more error)
+                    errors:
+                      switch:
+                        - The switch field is required.
+                      switchportid:
+                        - The switchportid field is required.
+                otherSwitch:
+                  summary: a LAG member to another switch
+                  value:
+                    message: Switch port et-0/0/20 is on another switch than the other physical interfaces of this connection. A LAG cannot span switches.
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+components:
+
+  schemas:
+
+    PhysicalInterface:
+      title: PhysicalInterface
+      description: |
+        A physical interface as the physical-interface endpoints and `GET /connection/{vi}`
+        represent it, built by `PhysicalInterfacePresenter::toArray()`: the fields of
+        `ConnectionPhysicalInterface`, with the same values, plus the connection, the type of
+        the switch port and the notes.
+      allOf:
+        - $ref: '#/components/schemas/ConnectionPhysicalInterface'
+        - type: object
+          required: [ connection, switchport_type, notes ]
+          properties:
+            connection:
+              type: [ integer, 'null' ]
+              description: '`virtualinterface.id` - the connection this interface belongs to.'
+            switchport_type:
+              type: [ integer, 'null' ]
+              description: |
+                The switch port's type: `0` unset, `1` peering, `2` monitor, `3` core, `4` other,
+                `5` management, `6` fanout, `7` reseller. Interfaces on core and fanout ports are
+                not changed through this API. Null once the interface is detached.
+            notes:
+              type: [ string, 'null' ]
+              description: Free text. A physical interface has no description.
+
+    ConnectionDetail:
+      title: ConnectionDetail
+      description: |
+        A connection as the connection/{vi} endpoints and the connection list represent it,
+        built by `ConnectionPresenter::toArray()`: every field of `Connection` with the same
+        value, plus what `PATCH /connection/{vi}` can change but `Connection` leaves out, and
+        the physical interfaces in their fuller shape.
+      allOf:
+        - $ref: '#/components/schemas/Connection'
+        - type: object
+          required: [ description, mtu, fastlacp ]
+          properties:
+            description:
+              type: [ string, 'null' ]
+              maxLength: 255
+            mtu:
+              type: [ integer, 'null' ]
+              description: The IP MTU configured on the interface; null for the default.
+            fastlacp:
+              type: boolean
+            physical_interfaces:
+              type: array
+              items:
+                $ref: '#/components/schemas/PhysicalInterface'
+
+    ConnectionList:
+      title: ConnectionList
+      type: object
+      required: [ connections, count, total, limit, offset ]
+      properties:
+        connections:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConnectionDetail'
+        count:
+          type: integer
+          description: Connections on this page.
+        total:
+          type: integer
+          description: Connections matching the filters, on all pages.
+        limit:
+          type: integer
+        offset:
+          type: integer
+
+    ConnectionUpdate:
+      title: ConnectionUpdate
+      type: object
+      description: |
+        Any subset of the connection's settings. Left out keeps, `null` clears. Other fields,
+        `custid` among them, are ignored.
+      minProperties: 1
+      properties:
+        name:
+          type: [ string, 'null' ]
+          maxLength: 255
+          description: |
+            The interface or bundle name. Surrounding double quotes are stripped, which is how
+            a name keeps trailing whitespace. On a LAG without one, the vendor's bundle name is
+            filled in.
+        description:
+          type: [ string, 'null' ]
+          maxLength: 255
+        mtu:
+          type: [ integer, 'null' ]
+          minimum: 1
+          maximum: 64000
+        trunk:
+          type: boolean
+          description: 802.1Q tagging.
+        channelgroup:
+          type: [ integer, 'null' ]
+          description: |
+            Must be unique on the connection's switch. Assigned automatically when LAG framing
+            is switched on without one; cannot be removed while the connection has more than one
+            physical interface.
+        lag_framing:
+          type: boolean
+          description: Cannot be switched off while the connection has more than one physical interface.
+        fastlacp:
+          type: boolean
+
+    ConnectionUpdateResult:
+      title: ConnectionUpdateResult
+      type: object
+      required: [ connection, changed ]
+      properties:
+        connection:
+          $ref: '#/components/schemas/ConnectionDetail'
+        changed:
+          type: array
+          items:
+            type: string
+          description: |
+            The attributes which actually changed, under their column names - including those
+            the LAG bookkeeping filled in. Empty when the PATCH matched what was stored.
+            `updated_at` is not listed.
+
+    PhysicalInterfaceInput:
+      title: PhysicalInterfaceInput
+      type: object
+      description: A new physical interface. The connection comes from the path.
+      required: [ switch, switchportid, speed ]
+      properties:
+        switch:
+          type: integer
+          description: '`switch.id`; the port must belong to it.'
+        switchportid:
+          type: integer
+          description: |
+            `switchport.id`: no physical interface, on an active switch, of type unset or
+            peering, and on the switch of the connection's other ports.
+        status:
+          type: integer
+          enum: [ 1, 2, 3, 4, 5 ]
+          default: 1
+        speed:
+          type: integer
+          enum: [ 10, 100, 1000, 10000, 25000, 40000, 100000, 400000 ]
+          description: Mbit/s.
+        duplex:
+          type: string
+          enum: [ full, half ]
+          default: full
+        rate_limit:
+          type: [ integer, 'null' ]
+          minimum: 0
+          description: Mbit/s; null or 0 for none.
+        autoneg:
+          type: boolean
+          default: true
+        notes:
+          type: [ string, 'null' ]
+
+    PhysicalInterfaceUpdate:
+      title: PhysicalInterfaceUpdate
+      type: object
+      description: |
+        Any subset of these. Left out keeps, `null` clears. Other fields - the switch, the port
+        and the connection among them - are ignored.
+      minProperties: 1
+      properties:
+        status:
+          type: integer
+          enum: [ 1, 2, 3, 4, 5 ]
+          description: '`1` Connected, `2` Disabled, `3` Not Connected, `4` Awaiting X-Connect, `5` Quarantine.'
+        speed:
+          type: integer
+          enum: [ 10, 100, 1000, 10000, 25000, 40000, 100000, 400000 ]
+        duplex:
+          type: string
+          enum: [ full, half ]
+        rate_limit:
+          type: [ integer, 'null' ]
+          minimum: 0
+          description: Mbit/s; null or 0 for none.
+        autoneg:
+          type: boolean
+        notes:
+          type: [ string, 'null' ]
+
+    PhysicalInterfaceMove:
+      title: PhysicalInterfaceMove
+      description: The target port, and optionally any change `PATCH /physical-interface/{pi}` takes.
+      allOf:
+        - $ref: '#/components/schemas/PhysicalInterfaceUpdate'
+        - type: object
+          required: [ switch, switchportid ]
+          properties:
+            switch:
+              type: integer
+              description: '`switch.id`; the port must belong to it.'
+            switchportid:
+              type: integer
+              description: |
+                `switchport.id`: no physical interface, on an active switch, of type unset or
+                peering. A LAG member's new port must be on the switch of the LAG's other
+                members.
+
+    PhysicalInterfaceUpdateResult:
+      title: PhysicalInterfaceUpdateResult
+      type: object
+      required: [ physical_interface, changed ]
+      properties:
+        physical_interface:
+          $ref: '#/components/schemas/PhysicalInterface'
+        changed:
+          type: array
+          items:
+            type: string
+          description: |
+            The attributes which actually changed, under their column names. Empty when nothing
+            did. `updated_at` is not listed.
