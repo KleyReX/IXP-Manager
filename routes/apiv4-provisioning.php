@@ -65,3 +65,36 @@ Route::delete( 'connection/{vi}', 'ConnectionController@destroy' )->name( 'api-v
 Route::post( 'onboarding', 'OnboardingController@store' )
     ->middleware( ShortCircuitKnownReference::class )
     ->name( 'api-v4-provisioning@onboarding' );
+
+/*
+|--------------------------------------------------------------------------
+| Wave 1 - the complete member and connection lifecycle
+|--------------------------------------------------------------------------
+|
+| One block per work package, so that the packages merge without conflicts.
+| Add routes only inside your own block.
+|
+*/
+
+// ---- wave 1: members ----------------------------------------------------
+
+
+
+// ---- wave 1: contacts ---------------------------------------------------
+
+
+
+// ---- wave 1: users ------------------------------------------------------
+
+
+
+// ---- wave 1: connections and physical interfaces -----------------------
+
+
+
+// ---- wave 1: vlan interfaces and MAC addresses ---------------------------
+
+
+
+// ---- wave 1: reference data ---------------------------------------------
+
