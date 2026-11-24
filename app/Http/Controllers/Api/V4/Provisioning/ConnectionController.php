@@ -43,6 +43,7 @@ use IXP\Models\{
 
 use IXP\Support\Provisioning\IpAllocationException;
 use IXP\Support\Provisioning\IpAllocator;
+use IXP\Support\Provisioning\Presenters\ConnectionPresenter;
 
 /**
  * Provisioning API - Connection Controller
@@ -66,20 +67,6 @@ use IXP\Support\Provisioning\IpAllocator;
  */
 class ConnectionController extends Common
 {
-    /**
-     * Relations connectionAsArray() reads.
-     *
-     * Eager loaded so that listing a member's connections is a fixed number of queries rather
-     * than one per interface per relation.
-     *
-     * @var array<int,string>
-     */
-    private const array RESPONSE_RELATIONS = [
-        'physicalInterfaces.switchPort.switcher',
-        'vlanInterfaces.ipv4address',
-        'vlanInterfaces.ipv6address',
-    ];
-
     /**
      * Create a connection for a member.
      *
@@ -181,11 +168,13 @@ class ConnectionController extends Common
         Log::notice( "Provisioning API: created connection {$vi->id} for {$cust->name} as "
             . Auth::user()->username );
 
-        return response()->json( [ 'connection' => $this->connectionAsArray( $vi->fresh( self::RESPONSE_RELATIONS ) ) ], 201 );
+        return response()->json( [ 'connection' => ConnectionPresenter::summary( $vi->fresh( ConnectionPresenter::RELATIONS ) ) ], 201 );
     }
 
     /**
      * List a member's connections.
+     *
+     * In ConnectionPresenter's summary shape, which this endpoint has always returned.
      *
      * @param  Customer  $cust
      *
@@ -194,9 +183,9 @@ class ConnectionController extends Common
     public function index( Customer $cust ): JsonResponse
     {
         $connections = $cust->virtualInterfaces()
-            ->with( self::RESPONSE_RELATIONS )
+            ->with( ConnectionPresenter::RELATIONS )
             ->get()
-            ->map( fn( VirtualInterface $vi ) => $this->connectionAsArray( $vi ) )
+            ->map( fn( VirtualInterface $vi ) => ConnectionPresenter::summary( $vi ) )
             ->values()->all();
 
         return response()->json( [ 'connections' => $connections ] );
@@ -289,50 +278,5 @@ class ConnectionController extends Common
         }
 
         return null;
-    }
-
-    /**
-     * Representation of a connection for API responses.
-     *
-     * @param  VirtualInterface  $vi
-     *
-     * @return array
-     */
-    private function connectionAsArray( VirtualInterface $vi ): array
-    {
-        return [
-            'id'                    => $vi->id,
-            'custid'                => $vi->custid,
-            'name'                  => $vi->name,
-            'trunk'                 => (bool)$vi->trunk,
-            'lag_framing'           => (bool)$vi->lag_framing,
-            'channelgroup'          => $vi->channelgroup,
-            'physical_interfaces'   => $vi->physicalInterfaces->map( fn( PhysicalInterface $pi ) => [
-                'id'            => $pi->id,
-                'status'        => $pi->status,
-                'speed'         => $pi->speed,
-                'duplex'        => $pi->duplex,
-                'rate_limit'    => $pi->rate_limit,
-                'autoneg'       => (bool)$pi->autoneg,
-                'switchport'    => $pi->switchportid,
-                'switchport_name' => $pi->switchPort?->name,
-                'switch'        => $pi->switchPort?->switchid,
-                'switch_name'   => $pi->switchPort?->switcher?->name,
-            ] )->values()->all(),
-            'vlan_interfaces'       => $vi->vlanInterfaces->map( fn( VlanInterface $vli ) => [
-                'id'            => $vli->id,
-                'vlan'          => $vli->vlanid,
-                'ipv4enabled'   => (bool)$vli->ipv4enabled,
-                'ipv4address'   => $vli->ipv4address?->address,
-                'ipv4hostname'  => $vli->ipv4hostname,
-                'ipv6enabled'   => (bool)$vli->ipv6enabled,
-                'ipv6address'   => $vli->ipv6address?->address,
-                'ipv6hostname'  => $vli->ipv6hostname,
-                'rsclient'      => (bool)$vli->rsclient,
-                'irrdbfilter'   => (bool)$vli->irrdbfilter,
-                'as112client'   => (bool)$vli->as112client,
-                'maxbgpprefix'  => [ 'ipv4' => $vli->ipv4maxbgpprefix, 'ipv6' => $vli->ipv6maxbgpprefix ],
-            ] )->values()->all(),
-        ];
     }
 }
