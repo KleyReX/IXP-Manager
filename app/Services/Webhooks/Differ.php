@@ -124,7 +124,7 @@ final class Differ
     }
 
     /**
-     * Whether every element of a list is an object with a distinct scalar `id`.
+     * Whether every element of a list is an object with a distinct integer or string `id`.
      *
      * An empty list qualifies, so that the first child added to an empty collection is reported
      * as that child rather than as the whole new list.
@@ -138,7 +138,7 @@ final class Differ
         $seen = [];
 
         foreach( $list as $item ) {
-            if( !is_array( $item ) || !isset( $item[ 'id' ] ) || !is_scalar( $item[ 'id' ] ) || isset( $seen[ $item[ 'id' ] ] ) ) {
+            if( !is_array( $item ) || !isset( $item[ 'id' ] ) || !( is_int( $item[ 'id' ] ) || is_string( $item[ 'id' ] ) ) || isset( $seen[ $item[ 'id' ] ] ) ) {
                 return false;
             }
 
