@@ -22,6 +22,7 @@ namespace IXP\Http\Requests\Api\V4\Provisioning;
  * http://www.gnu.org/licenses/gpl-2.0.html
  */
 
+use IXP\Http\Requests\Api\V4\Provisioning\Concerns\StripsInputKeys;
 use IXP\Http\Requests\Customer\Store;
 use IXP\Models\Customer;
 
@@ -40,6 +41,10 @@ use IXP\Models\Customer;
  * Customer::create() unvalidated. We do not change the web rules - that is upstream's call -
  * but the API validates the names the database actually uses.
  *
+ * `peeringdb_oauth` belongs to the delta for the same reason: the web create and edit forms
+ * both post it and the column is fillable, but no web rule names it. Without a rule here
+ * validated() would drop it and a member could only ever be created with the database default.
+ *
  * @author     KleyReX
  * @category   IXP
  * @package    IXP\Http\Requests\Api\V4\Provisioning
@@ -48,6 +53,8 @@ use IXP\Models\Customer;
  */
 class StoreCustomer extends Store
 {
+    use StripsInputKeys;
+
     /**
      * Rules added on top of the inherited web form rules.
      *
@@ -63,6 +70,7 @@ class StoreCustomer extends Store
             'isReseller'            => 'boolean',
             'isResold'              => 'boolean',
             'activepeeringmatrix'   => 'boolean',
+            'peeringdb_oauth'       => 'boolean',
         ];
     }
 
@@ -79,5 +87,22 @@ class StoreCustomer extends Store
     public function rules(): array
     {
         return array_merge( parent::rules(), self::delta() );
+    }
+
+    /**
+     * Remove input which would stand in for the route model inside the inherited rules.
+     *
+     * Customer\Store reads `$this->cust` - for the unique-shortname exemption and throughout
+     * checkReseller() - meaning the member being edited. A body key `cust` takes its place
+     * (see StripsInputKeys), and the request ends in a 500 instead of a validation result.
+     * `id` is no column a caller may set either; it goes too, so that nothing downstream can
+     * mistake it for the member's.
+     *
+     * @return void
+     */
+    #[\Override]
+    protected function prepareForValidation(): void
+    {
+        $this->stripInputKeys( 'cust', 'id' );
     }
 }

@@ -22,10 +22,9 @@ namespace IXP\Http\Requests\Api\V4\Provisioning;
  * http://www.gnu.org/licenses/gpl-2.0.html
  */
 
-use Carbon\Carbon;
-use DateTimeInterface;
-
 use IXP\Models\Customer;
+
+use IXP\Support\Provisioning\Presenters\MemberPresenter;
 
 /**
  * Provisioning API - UpdateCustomer request
@@ -35,6 +34,11 @@ use IXP\Models\Customer;
  * result runs through the rules StoreCustomer uses - the web rules plus the declared delta.
  * PATCH therefore behaves like opening the edit form, changing the given fields and saving,
  * and RulesParityTest holds this class to the web rules exactly as it holds StoreCustomer.
+ *
+ * The rules and the delta are StoreCustomer's, inherited rather than restated. The web uses
+ * one form request for creating and editing, and since `peeringdb_oauth` - the one field the
+ * edit form offered that creation did not validate - joined the create delta, there is
+ * nothing left for this class to add.
  *
  * One deliberate leniency: a field which is currently empty and not sent stays absent rather
  * than being filled in as null. The web rules contain non-nullable ones such as `nocemail`
@@ -65,41 +69,18 @@ class UpdateCustomer extends StoreCustomer
     ];
 
     /**
-     * Rules added on top of the inherited web form rules: StoreCustomer's delta, plus the one
-     * field the web edit form offers but creation does not.
-     *
-     * @return array<string,string>
-     */
-    #[\Override]
-    public static function delta(): array
-    {
-        return array_merge( parent::delta(), [
-            'peeringdb_oauth'       => 'boolean',
-        ] );
-    }
-
-    /**
-     * Get the validation rules that apply to the request.
-     *
-     * @return array<string,mixed>
-     *
-     * @psalm-suppress LessSpecificImplementedReturnType
-     *      As in StoreCustomer: merging the delta widens the parent's inferred array shape.
-     */
-    #[\Override]
-    public function rules(): array
-    {
-        return array_merge( parent::rules(), self::delta() );
-    }
-
-    /**
      * Complete the request with the member's current values before it is validated.
+     *
+     * The parent strips `cust` and `id` first: the route member, not the body, is the member
+     * being changed - and the completion below must not be fed a value which is about to go.
      *
      * @return void
      */
     #[\Override]
     protected function prepareForValidation(): void
     {
+        parent::prepareForValidation();
+
         $cust = $this->route( 'cust' );
 
         if( !$cust instanceof Customer ) {
@@ -138,29 +119,11 @@ class UpdateCustomer extends StoreCustomer
         // must stay NULL: turning it into 0 here would make the PATCH change a field the
         // caller never mentioned.
         return match( $field ) {
-            'datejoin', 'dateleave'                             => $this->asDate( $value ),
+            'datejoin', 'dateleave'                             => MemberPresenter::date( $value ),
             'isResold'                                          => $resold ? 1 : 0,
             'reseller'                                          => $resold ? $cust->reseller : null,
             'isReseller', 'activepeeringmatrix', 'peeringdb_oauth' => $value === null ? null : (int)(bool)$value,
             default                                             => $value,
         };
-    }
-
-    /**
-     * Normalise a stored date to Y-m-d, as the edit form shows it.
-     *
-     * @param  mixed  $value
-     *
-     * @return string|null
-     */
-    private function asDate( mixed $value ): ?string
-    {
-        if( $value === null || $value === '' ) {
-            return null;
-        }
-
-        return $value instanceof DateTimeInterface
-            ? $value->format( 'Y-m-d' )
-            : Carbon::parse( $value )->format( 'Y-m-d' );
     }
 }

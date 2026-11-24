@@ -77,6 +77,7 @@ Route::post( 'onboarding', 'OnboardingController@store' )
 */
 
 // ---- wave 1: members ----------------------------------------------------
+Route::get(   'member',                             'MemberController@listCustomers'       )->name( 'api-v4-provisioning@member-index'                       );
 
 
 
