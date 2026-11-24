@@ -119,6 +119,7 @@ class StoreMacAddress extends FormRequest
      *
      * @return array<string,string>
      */
+    #[\Override]
     public function messages(): array
     {
         $message = 'The mac must be a MAC address: 12 hexadecimal digits, with or without separators.';
@@ -134,6 +135,7 @@ class StoreMacAddress extends FormRequest
      *
      * @return void
      */
+    #[\Override]
     protected function prepareForValidation(): void
     {
         foreach( self::ROUTE_PARAMETERS as $key ) {
@@ -142,7 +144,11 @@ class StoreMacAddress extends FormRequest
             $this->getInputSource()->remove( $key );
         }
 
-        if( is_string( $mac = $this->input( 'mac' ) ) ) {
+        // input() without a key: with one, static analysis answers from the rules, which have not
+        // been applied yet - a caller can still send an array or a number here
+        $mac = $this->input()[ 'mac' ] ?? null;
+
+        if( is_string( $mac ) ) {
             $this->merge( [ 'mac' => self::normalise( $mac ) ] );
         }
     }

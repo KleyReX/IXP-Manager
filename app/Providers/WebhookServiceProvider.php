@@ -77,6 +77,7 @@ class WebhookServiceProvider extends ServiceProvider
      *
      * @return void
      */
+    #[\Override]
     public function register(): void
     {
         $this->app->singleton( Recorder::class );
@@ -135,7 +136,7 @@ class WebhookServiceProvider extends ServiceProvider
         } );
 
         $events->listen( CommandStarting::class, function( CommandStarting $e ) {
-            $this->app->make( Recorder::class )->beginCommand( (string)$e->command );
+            $this->app->make( Recorder::class )->beginCommand( $e->command );
         } );
 
         $events->listen( JobProcessing::class, function( JobProcessing $e ) {

@@ -66,7 +66,7 @@ class Retry extends Command
      */
     public function handle(): int
     {
-        $ids      = array_map( 'intval', (array)$this->argument( 'delivery' ) );
+        $ids      = array_map( 'intval', $this->argument( 'delivery' ) );
         $statuses = array_merge(
             $this->option( 'failed' )  ? [ WebhookDelivery::STATUS_FAILED ]  : [],
             $this->option( 'skipped' ) ? [ WebhookDelivery::STATUS_SKIPPED ] : [],

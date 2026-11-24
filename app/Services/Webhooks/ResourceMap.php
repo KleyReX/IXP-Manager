@@ -181,8 +181,8 @@ final class ResourceMap
     {
         $class = $m::class;
 
-        if( isset( self::ROOTS[ $class ] ) ) {
-            [ $type, $trigger ] = self::ROOTS[ $class ];
+        if( $root = self::root( $class ) ) {
+            [ $type, $trigger ] = $root;
 
             return match( $event ) {
                 self::CREATED   => [ [ $type, (int)$m->getKey(), true ] ],
@@ -213,11 +213,27 @@ final class ResourceMap
      */
     public static function resourcesOf( Model $m ): array
     {
-        if( isset( self::ROOTS[ $m::class ] ) ) {
-            return $m->getKey() ? [ [ self::ROOTS[ $m::class ][ 0 ], (int)$m->getKey(), false ] ] : [];
+        if( $root = self::root( $m::class ) ) {
+            return $m->getKey() ? [ [ $root[ 0 ], (int)$m->getKey(), false ] ] : [];
         }
 
         return isset( self::CHILDREN[ $m::class ] ) ? self::parents( $m, self::DELETING ) : [];
+    }
+
+    /**
+     * The entry of ROOTS for a model class.
+     *
+     * A lookup by a plain string, which is what a class name is when it comes from a model: the
+     * constant's inferred type is a shape of exactly the six classes listed, and static analysis
+     * rejects any other key for it, although other models are the common case here.
+     *
+     * @param  string  $class
+     *
+     * @return array{0:string,1:string|array<int,string>}|null
+     */
+    private static function root( string $class ): ?array
+    {
+        return self::ROOTS[ $class ] ?? null;
     }
 
     /**
@@ -313,9 +329,9 @@ final class ResourceMap
     /**
      * The switch ports the physical interfaces of these connections occupy.
      *
-     * @param  array<int,int>  $viIds
+     * @param  array<int,mixed>  $viIds  raw column values; keys() makes ints of them
      *
-     * @return array<int,int>
+     * @return array<int,mixed>
      */
     private static function portsOf( array $viIds ): array
     {

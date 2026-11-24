@@ -164,7 +164,11 @@ class VlanInterfaceController extends Common
                 foreach( [ false, true ] as $ipv6 ) {
                     $field = ( $ipv6 ? 'ipv6' : 'ipv4' ) . 'address';
 
-                    $resolved[ $field ] = ( new IpAllocator() )->claim( $vlan, $validated[ $field ] ?? null, $ipv6 )?->address;
+                    // StoreVlanInterface validates both fields as `nullable|string`
+                    /** @var string|null $requested */
+                    $requested = $validated[ $field ] ?? null;
+
+                    $resolved[ $field ] = ( new IpAllocator() )->claim( $vlan, $requested, $ipv6 )?->address;
                 }
 
                 $ipRequest = Request::create( '/', 'POST', $resolved );

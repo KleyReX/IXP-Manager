@@ -167,7 +167,7 @@ class MacAddressController extends Controller
      */
     public function store( StoreMacAddress $r, VlanInterface $vli ): JsonResponse
     {
-        $mac = (string)$r->validated()[ 'mac' ];
+        $mac = $r->validated()[ 'mac' ];
 
         try {
             $l2a = DB::transaction( function() use ( $vli, $mac ) {

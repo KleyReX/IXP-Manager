@@ -131,6 +131,12 @@ class PortalUserController extends Controller
      */
     public function index( Request $r ): JsonResponse
     {
+        /**
+         * The privs rule is built by concatenation, which static analysis cannot read, so the shape
+         * is spelled out. Query-string numbers arrive as strings, whatever the `integer` rule says.
+         *
+         * @var array{email?:string,username?:string,q?:string,member?:int|string,privs?:int|string,enabled?:bool|int|string,limit?:int|string} $v
+         */
         $v = $r->validate( [
             'email'     => 'filled|email|max:255',
             'username'  => 'filled|string|max:255',

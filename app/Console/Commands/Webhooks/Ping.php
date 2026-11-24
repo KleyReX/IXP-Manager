@@ -69,7 +69,7 @@ class Ping extends Command
      */
     public function handle( Deliverer $deliverer ): int
     {
-        $name = (string)$this->argument( 'endpoint' );
+        $name = $this->argument( 'endpoint' );
 
         if( !( $endpoint = Endpoints::find( $name ) ) ) {
             $this->error( "There is no endpoint {$name} (IXP_WEBHOOKS_URL is empty?)." );

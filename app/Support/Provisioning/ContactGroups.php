@@ -65,6 +65,9 @@ class ContactGroups
      */
     public static function types(): array
     {
+        // config/contact_group.php is the installation's own file (only a .dist is shipped), so
+        // nothing is known about it statically
+        /** @var mixed $types */
         $types = config( 'contact_group.types' );
 
         return self::enabled() && is_array( $types ) ? $types : [];
