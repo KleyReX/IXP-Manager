@@ -123,6 +123,12 @@ info:
       (`PATCH /member/{cust}`), disabling, renaming or deleting the owner, and lowering its
       privilege on its default member are therefore refused with `409`.
 
+    **Correlation ids.** Every endpoint accepts an optional `X-Correlation-Id` header. It is
+    echoed in the response and stamped, as `origin.correlation_id`, on every outgoing webhook
+    event the request causes - side effects on other resources included - next to
+    `origin.channel: provisioning_api` and `origin.api_key_id`. A caller which also receives the
+    webhooks recognises the echo of its own commands by it. See the webhook documentation.
+
   license:
     name: GNU General Public License v2.0 only
     identifier: GPL-2.0-only
@@ -178,6 +184,8 @@ tags:
 paths:
 
   /member:
+    parameters:
+      - $ref: '#/components/parameters/CorrelationId'
     get:
       tags: [ Members ]
       operationId: listMembers
@@ -546,6 +554,7 @@ paths:
 
   /member/{cust}:
     parameters:
+      - $ref: '#/components/parameters/CorrelationId'
       - $ref: '#/components/parameters/CustomerId'
     get:
       tags: [ Members ]
@@ -742,6 +751,7 @@ paths:
 
   /member/{cust}/billing-registration:
     parameters:
+      - $ref: '#/components/parameters/CorrelationId'
       - $ref: '#/components/parameters/CustomerId'
     get:
       tags: [ Members ]
@@ -956,6 +966,8 @@ paths:
           $ref: '#/components/responses/TooManyRequests'
 
   /contact-group:
+    parameters:
+      - $ref: '#/components/parameters/CorrelationId'
     get:
       tags: [ Contacts ]
       operationId: listContactGroups
@@ -1044,6 +1056,7 @@ paths:
 
   /member/{cust}/contact:
     parameters:
+      - $ref: '#/components/parameters/CorrelationId'
       - $ref: '#/components/parameters/CustomerId'
     get:
       tags: [ Contacts ]
@@ -1241,6 +1254,7 @@ paths:
 
   /contact/{contact}:
     parameters:
+      - $ref: '#/components/parameters/CorrelationId'
       - $ref: '#/components/parameters/ContactId'
     get:
       tags: [ Contacts ]
@@ -1437,6 +1451,8 @@ paths:
           $ref: '#/components/responses/TooManyRequests'
 
   /user:
+    parameters:
+      - $ref: '#/components/parameters/CorrelationId'
     get:
       tags: [ Users ]
       operationId: listUsers
@@ -1576,6 +1592,7 @@ paths:
 
   /user/{u}:
     parameters:
+      - $ref: '#/components/parameters/CorrelationId'
       - $ref: '#/components/parameters/UserId'
     get:
       tags: [ Users ]
@@ -1732,6 +1749,7 @@ paths:
 
   /user/{u}/welcome-email:
     parameters:
+      - $ref: '#/components/parameters/CorrelationId'
       - $ref: '#/components/parameters/UserId'
     post:
       tags: [ Users ]
@@ -1806,6 +1824,7 @@ paths:
 
   /member/{cust}/offboard:
     parameters:
+      - $ref: '#/components/parameters/CorrelationId'
       - $ref: '#/components/parameters/CustomerId'
     post:
       tags: [ Members ]
@@ -2052,6 +2071,7 @@ paths:
 
   /member/{cust}/user:
     parameters:
+      - $ref: '#/components/parameters/CorrelationId'
       - $ref: '#/components/parameters/CustomerId'
     get:
       tags: [ Users ]
@@ -2224,6 +2244,7 @@ paths:
 
   /member/{cust}/user/{u}:
     parameters:
+      - $ref: '#/components/parameters/CorrelationId'
       - $ref: '#/components/parameters/CustomerId'
       - $ref: '#/components/parameters/UserId'
     get:
@@ -2434,6 +2455,7 @@ paths:
 
   /member/{cust}/connection:
     parameters:
+      - $ref: '#/components/parameters/CorrelationId'
       - $ref: '#/components/parameters/CustomerId'
     get:
       tags: [ Connections ]
@@ -2722,6 +2744,8 @@ paths:
           $ref: '#/components/responses/TooManyRequests'
 
   /connection:
+    parameters:
+      - $ref: '#/components/parameters/CorrelationId'
     get:
       tags: [ Connections ]
       operationId: listConnections
@@ -2859,6 +2883,7 @@ paths:
 
   /connection/{vi}:
     parameters:
+      - $ref: '#/components/parameters/CorrelationId'
       - $ref: '#/components/parameters/VirtualInterfaceId'
     get:
       tags: [ Connections ]
@@ -3114,6 +3139,7 @@ paths:
 
   /connection/{vi}/physical-interface:
     parameters:
+      - $ref: '#/components/parameters/CorrelationId'
       - $ref: '#/components/parameters/VirtualInterfaceId'
     post:
       tags: [ Connections ]
@@ -3233,6 +3259,7 @@ paths:
 
   /physical-interface/{pi}:
     parameters:
+      - $ref: '#/components/parameters/CorrelationId'
       - $ref: '#/components/parameters/PhysicalInterfaceId'
     get:
       tags: [ Connections ]
@@ -3422,6 +3449,7 @@ paths:
 
   /physical-interface/{pi}/move:
     parameters:
+      - $ref: '#/components/parameters/CorrelationId'
       - $ref: '#/components/parameters/PhysicalInterfaceId'
     post:
       tags: [ Connections ]
@@ -3538,6 +3566,7 @@ paths:
 
   /connection/{vi}/vlan-interface:
     parameters:
+      - $ref: '#/components/parameters/CorrelationId'
       - $ref: '#/components/parameters/VirtualInterfaceId'
     post:
       tags: [ VLAN interfaces and MAC addresses ]
@@ -3707,6 +3736,7 @@ paths:
 
   /vlan-interface/{vli}:
     parameters:
+      - $ref: '#/components/parameters/CorrelationId'
       - $ref: '#/components/parameters/VlanInterfaceId'
     get:
       tags: [ VLAN interfaces and MAC addresses ]
@@ -3941,6 +3971,7 @@ paths:
 
   /vlan-interface/{vli}/mac:
     parameters:
+      - $ref: '#/components/parameters/CorrelationId'
       - $ref: '#/components/parameters/VlanInterfaceId'
     get:
       tags: [ VLAN interfaces and MAC addresses ]
@@ -4059,6 +4090,8 @@ paths:
           $ref: '#/components/responses/TooManyRequests'
 
   /mac:
+    parameters:
+      - $ref: '#/components/parameters/CorrelationId'
     get:
       tags: [ VLAN interfaces and MAC addresses ]
       operationId: lookupMacs
@@ -4111,6 +4144,7 @@ paths:
 
   /mac/{l2a}:
     parameters:
+      - $ref: '#/components/parameters/CorrelationId'
       - $ref: '#/components/parameters/MacAddressId'
     delete:
       tags: [ VLAN interfaces and MAC addresses ]
@@ -4143,6 +4177,8 @@ paths:
           $ref: '#/components/responses/TooManyRequests'
 
   /ping:
+    parameters:
+      - $ref: '#/components/parameters/CorrelationId'
     get:
       tags: [ Reference data ]
       operationId: ping
@@ -4173,6 +4209,8 @@ paths:
           $ref: '#/components/responses/TooManyRequests'
 
   /switch:
+    parameters:
+      - $ref: '#/components/parameters/CorrelationId'
     get:
       tags: [ Reference data ]
       operationId: listSwitches
@@ -4267,6 +4305,8 @@ paths:
           $ref: '#/components/responses/TooManyRequests'
 
   /infrastructure:
+    parameters:
+      - $ref: '#/components/parameters/CorrelationId'
     get:
       tags: [ Reference data ]
       operationId: listInfrastructures
@@ -4323,6 +4363,8 @@ paths:
           $ref: '#/components/responses/TooManyRequests'
 
   /port/free:
+    parameters:
+      - $ref: '#/components/parameters/CorrelationId'
     get:
       tags: [ Reference data ]
       operationId: listFreePorts
@@ -4424,6 +4466,8 @@ paths:
           $ref: '#/components/responses/TooManyRequests'
 
   /vlan:
+    parameters:
+      - $ref: '#/components/parameters/CorrelationId'
     get:
       tags: [ Reference data ]
       operationId: listVlans
@@ -4519,6 +4563,7 @@ paths:
 
   /vlan/{vlan}:
     parameters:
+      - $ref: '#/components/parameters/CorrelationId'
       - $ref: '#/components/parameters/VlanId'
     get:
       tags: [ Reference data ]
@@ -4576,6 +4621,8 @@ paths:
           $ref: '#/components/responses/TooManyRequests'
 
   /vlan/{vlan}/address:
+    parameters:
+      - $ref: '#/components/parameters/CorrelationId'
     get:
       tags: [ Reference data ]
       operationId: listVlanAddresses
@@ -4724,6 +4771,8 @@ paths:
           $ref: '#/components/responses/TooManyRequests'
 
   /irrdb-source:
+    parameters:
+      - $ref: '#/components/parameters/CorrelationId'
     get:
       tags: [ Reference data ]
       operationId: listIrrdbSources
@@ -4857,6 +4906,7 @@ paths:
 
   /irrdb-source/{irrdbconfig}:
     parameters:
+      - $ref: '#/components/parameters/CorrelationId'
       - $ref: '#/components/parameters/IrrdbSourceId'
     get:
       tags: [ Reference data ]
@@ -4892,6 +4942,8 @@ paths:
           $ref: '#/components/responses/TooManyRequests'
 
   /facility:
+    parameters:
+      - $ref: '#/components/parameters/CorrelationId'
     get:
       tags: [ Reference data ]
       operationId: listFacilities
@@ -4942,6 +4994,7 @@ paths:
 
   /facility/{location}:
     parameters:
+      - $ref: '#/components/parameters/CorrelationId'
       - $ref: '#/components/parameters/FacilityId'
     get:
       tags: [ Reference data ]
@@ -4969,6 +5022,8 @@ paths:
           $ref: '#/components/responses/TooManyRequests'
 
   /rack:
+    parameters:
+      - $ref: '#/components/parameters/CorrelationId'
     get:
       tags: [ Reference data ]
       operationId: listRacks
@@ -5031,6 +5086,7 @@ paths:
 
   /rack/{cabinet}:
     parameters:
+      - $ref: '#/components/parameters/CorrelationId'
       - $ref: '#/components/parameters/RackId'
     get:
       tags: [ Reference data ]
@@ -5058,6 +5114,8 @@ paths:
           $ref: '#/components/responses/TooManyRequests'
 
   /vendor:
+    parameters:
+      - $ref: '#/components/parameters/CorrelationId'
     get:
       tags: [ Reference data ]
       operationId: listVendors
@@ -5094,6 +5152,8 @@ paths:
           $ref: '#/components/responses/TooManyRequests'
 
   /onboarding:
+    parameters:
+      - $ref: '#/components/parameters/CorrelationId'
     post:
       tags: [ Onboarding ]
       operationId: onboard
@@ -5512,6 +5572,31 @@ components:
         minimum: 1
       example: 3
 
+    CorrelationId:
+      name: X-Correlation-Id
+      in: header
+      required: false
+      description: |
+        The caller's identifier for the command this request belongs to - a fresh value per
+        command, recorded by the caller before it calls. 1 to 100 characters from
+        `A-Z a-z 0-9 . _ : -`; a UUID fits. Anything else, including an over-long value, is
+        answered with `422` before the request is processed, whether webhooks are enabled or not:
+        a value that was silently dropped would leave the caller unable to recognise its change.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 100
+        pattern: '^[A-Za-z0-9._:-]{1,100}$'
+      example: api5-cmd-88f1
+
+  headers:
+
+    CorrelationId:
+      description: The request's `X-Correlation-Id`, unchanged; absent when the request had none.
+      schema:
+        type: string
+      example: api5-cmd-88f1
+
   responses:
 
     Unauthorized:
@@ -5635,6 +5720,20 @@ components:
             $ref: '#/components/schemas/Error'
           example:
             message: Too Many Attempts.
+
+    InvalidCorrelationId:
+      description: |
+        The `X-Correlation-Id` header is not 1 to 100 characters from `A-Z a-z 0-9 . _ : -`.
+        Nothing was processed.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ValidationError'
+          example:
+            message: 'The X-Correlation-Id header must be 1 to 100 characters from A-Z, a-z, 0-9, ".", "_", ":" and "-". Nothing was changed.'
+            errors:
+              X-Correlation-Id:
+                - 'The X-Correlation-Id header must be 1 to 100 characters from A-Z, a-z, 0-9, ".", "_", ":" and "-". Nothing was changed.'
 
   schemas:
 

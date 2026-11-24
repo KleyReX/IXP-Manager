@@ -1,8 +1,4 @@
-<!--
-Fragment from the wave 1b "hooks" work package: outgoing webhooks.
-
-Merge notes:
-  - Everything from "# Outgoing webhooks" down is new. It is long enough to be its own document
+# Provisioning API - outgoing webhooks" down is new. It is long enough to be its own document
     (suggested: docs/webhooks.md, linked from docs/provisioning-api.md); as a chapter of
     provisioning-api.md, demote every heading by one level.
   - The provisioning API gains one optional request header on every endpoint, X-Correlation-Id
