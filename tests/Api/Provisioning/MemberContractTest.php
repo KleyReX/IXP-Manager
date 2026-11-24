@@ -370,4 +370,30 @@ class MemberContractTest extends TestCase
             ->get( '/admin/api/v4/provisioning/member/99999999' )
             ->assertStatus( 404 );
     }
+
+    /**
+     * The same as a JSON body. StoreUser removed the id from $this->request only, which a JSON
+     * body never reaches - so a JSON request kept it, exempted the existing username from the
+     * unique rule and ended on the database constraint with a 500.
+     */
+    public function testUserCreationIgnoresIdInAJsonBody(): void
+    {
+        $this->withHeader( 'X-IXP-Manager-API-Key', self::API_KEY_SUPERUSER )
+            ->post( '/admin/api/v4/provisioning/member', $this->customerPayload( 'provtestjid' ) )
+            ->assertStatus( 201 );
+
+        $cust     = $this->fetchCustomer( 'provtestjid' );
+        $existing = User::firstOrFail();
+
+        $this->withHeader( 'X-IXP-Manager-API-Key', self::API_KEY_SUPERUSER )
+            ->postJson( "/admin/api/v4/provisioning/member/{$cust->id}/user", [
+                'name'      => 'Duplicate Attempt',
+                'username'  => $existing->username,
+                'email'     => 'provtestjid@example.com',
+                'privs'     => User::AUTH_CUSTUSER,
+                'id'        => $existing->id,
+            ] )
+            ->assertStatus( 422 )
+            ->assertJsonValidationErrors( [ 'username' ] );
+    }
 }

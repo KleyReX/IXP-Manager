@@ -81,13 +81,22 @@ class StoreConnection extends StoreVirtualInterfaceWizard
      * `neighbor  as 65551;` in the route server configuration - a parse error which invalidates
      * the generated config for the whole VLAN, not merely that peer.
      *
+     * The hostnames keep the wizard's rule with `bail` in front, exactly as StoreVlanInterface
+     * does and for the same reason: IdnValidate hands any value to idn_to_ascii(), which throws
+     * a TypeError for a non-string, so `"ipv4hostname": ["x"]` was a 500 here as well. With
+     * `bail`, the inherited `string` rule refuses it first; for a string nothing changes.
+     *
      * @return array<string,mixed>
      */
     public function overrides(): array
     {
+        $web = parent::rules();
+
         return [
-            'ipv4address' => ( $this->boolean( 'ipv4enabled' ) ? 'required' : 'nullable' ) . '|string|max:255',
-            'ipv6address' => ( $this->boolean( 'ipv6enabled' ) ? 'required' : 'nullable' ) . '|string|max:255',
+            'ipv4address'  => ( $this->boolean( 'ipv4enabled' ) ? 'required' : 'nullable' ) . '|string|max:255',
+            'ipv6address'  => ( $this->boolean( 'ipv6enabled' ) ? 'required' : 'nullable' ) . '|string|max:255',
+            'ipv4hostname' => StoreVlanInterface::bail( $web[ 'ipv4hostname' ] ),
+            'ipv6hostname' => StoreVlanInterface::bail( $web[ 'ipv6hostname' ] ),
         ];
     }
 
@@ -101,7 +110,7 @@ class StoreConnection extends StoreVirtualInterfaceWizard
      */
     public static function overriddenFields(): array
     {
-        return [ 'ipv4address', 'ipv6address' ];
+        return [ 'ipv4address', 'ipv6address', 'ipv4hostname', 'ipv6hostname' ];
     }
 
     /**

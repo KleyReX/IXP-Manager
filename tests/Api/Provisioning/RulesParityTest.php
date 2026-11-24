@@ -31,6 +31,8 @@ use IXP\Http\Requests\StoreVirtualInterfaceWizard as WebStoreWizard;
 use IXP\Http\Requests\User\Store as WebStoreUser;
 use IXP\Models\Customer;
 
+use IXP\Http\Requests\Api\V4\Provisioning\StoreVlanInterface;
+
 use Tests\TestCase;
 
 /**
@@ -245,6 +247,24 @@ class RulesParityTest extends TestCase
                 $web->rules(),
                 "'{$field}' is declared as an override but upstream has no such rule."
             );
+        }
+    }
+
+    /**
+     * The connection hostnames are the wizard's rule with 'bail' in front - exactly, so that
+     * they keep following upstream. Without 'bail', IdnValidate ran on a non-string value and
+     * turned a validation error into a 500.
+     */
+    public function testConnectionHostnameOverrideIsTheWizardRuleWithBail(): void
+    {
+        foreach( [ [ 'ipv4enabled' => false, 'ipv6enabled' => false ], [ 'ipv4enabled' => true, 'ipv6enabled' => true ] ] as $payload ) {
+            $web = WebStoreWizard::create( '/', 'POST', $payload )->rules();
+            $api = StoreConnection::create( '/', 'POST', $payload )->rules();
+
+            foreach( [ 'ipv4hostname', 'ipv6hostname' ] as $field ) {
+                $this->assertEquals( StoreVlanInterface::bail( $web[ $field ] ), $api[ $field ],
+                    "The {$field} override is not the wizard rule with bail." );
+            }
         }
     }
 }

@@ -22,6 +22,7 @@ namespace IXP\Http\Requests\Api\V4\Provisioning;
  * http://www.gnu.org/licenses/gpl-2.0.html
  */
 
+use IXP\Http\Requests\Api\V4\Provisioning\Concerns\StripsInputKeys;
 use IXP\Http\Requests\User\Store;
 use IXP\Models\Customer;
 
@@ -44,6 +45,8 @@ use IXP\Models\Customer;
  */
 class StoreUser extends Store
 {
+    use StripsInputKeys;
+
     /**
      * Rules added on top of the inherited web form rules.
      *
@@ -86,8 +89,10 @@ class StoreUser extends Store
         // The inherited username rule reads `$this->id` to exempt the record being edited from
         // the uniqueness check. This endpoint only creates, so an `id` in the body could only
         // serve to exempt someone else's username - and the request would then fail on the
-        // database constraint with a 500 rather than a 422:
-        $this->request->remove( 'id' );
+        // database constraint with a 500 rather than a 422. Removed from every input bag:
+        // a JSON body lives in its own bag, which $this->request->remove() alone never
+        // reached, so a JSON request kept the id:
+        $this->stripInputKeys( 'id' );
 
         if( ( $cust = $this->route( 'cust' ) ) instanceof Customer ) {
             $this->merge( [ 'custid' => $cust->id ] );

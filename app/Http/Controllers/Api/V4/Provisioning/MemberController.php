@@ -50,7 +50,12 @@ use IXP\Models\{
     User
 };
 
-use IXP\Support\Provisioning\Presenters\MemberPresenter;
+use IXP\Support\Provisioning\Presenters\{
+    MemberPresenter,
+    UserPresenter
+};
+
+use IXP\Support\Provisioning\SelfLockout;
 
 /**
  * Provisioning API - Member Controller
@@ -198,10 +203,29 @@ class MemberController extends Controller
      */
     public function updateCustomer( UpdateCustomer $r, Customer $cust ): JsonResponse
     {
-        $cust->update( array_merge( $r->validated(), [
-            'lastupdatedby'     => Auth::id(),
-            'reseller'          => $r->boolean( 'isResold' ) ? $r->input( 'reseller' ) : null,
-        ] ) );
+        try {
+            DB::transaction( function() use ( $r, $cust ) {
+                $cust->update( array_merge( $r->validated(), [
+                    'lastupdatedby'     => Auth::id(),
+                    'reseller'          => $r->boolean( 'isResold' ) ? $r->input( 'reseller' ) : null,
+                ] ) );
+
+                // ApiAuthenticate refuses a key whose user's default member is not active, with
+                // exactly this query. A PATCH which closed or suspended that member would lock the
+                // caller out with its own request. Asked inside the transaction, so that it sees
+                // the change, and the rollback takes the change back.
+                if( (int)$cust->id === (int)Auth::user()->custid
+                    && Auth::user()->customer()->active()->notDeleted()->doesntExist() ) {
+                    throw new SelfLockout;
+                }
+            } );
+        } catch( SelfLockout ) {
+            return response()->json( [
+                'message' => "This change would deactivate the member of the API key's own user, after which IXP "
+                    . 'Manager refuses the key. Nothing was changed. Make this change with a key whose user belongs '
+                    . 'to another member, or in the web interface.',
+            ], 409 );
+        }
 
         $changed = array_values( array_diff( array_keys( $cust->getChanges() ), [ 'updated_at', 'lastupdatedby' ] ) );
 
@@ -229,7 +253,7 @@ class MemberController extends Controller
      */
     public function storeUser( StoreUser $r, Customer $cust ): JsonResponse
     {
-        $user = DB::transaction( function() use ( $r, $cust ) {
+        [ $user, $c2u ] = DB::transaction( function() use ( $r, $cust ) {
             $user = new User;
             $user->creator          = Auth::user()->username;
             $user->password         = Hash::make( Str::random( 16 ) );
@@ -254,7 +278,7 @@ class MemberController extends Controller
             $c2u->extra_attributes  = [ 'created_by' => [ 'type' => 'api', 'user_id' => Auth::id() ] ];
             $c2u->save();
 
-            return $user;
+            return [ $user, $c2u ];
         } );
 
         // only once the transaction has committed, or a later failure would still have sent
@@ -264,7 +288,9 @@ class MemberController extends Controller
         Log::notice( "Provisioning API: created user {$user->username} for {$cust->name} as "
             . Auth::user()->username );
 
-        return response()->json( [ 'user' => $this->userAsArray( $user, (int)$r->input( 'privs' ) ) ], 201 );
+        // the same representation as GET member/{cust}/user/{u}: a superset of the fields this
+        // endpoint has always returned
+        return response()->json( [ 'user' => UserPresenter::forMember( $user, $c2u ) ], 201 );
     }
 
     /**
@@ -281,24 +307,4 @@ class MemberController extends Controller
         return str_replace( [ '\\', '%', '_' ], [ '\\\\', '\\%', '\\_' ], $term );
     }
 
-    /**
-     * Representation of a user for API responses.
-     *
-     * @param  User  $user
-     * @param  int   $privs
-     *
-     * @return array
-     */
-    private function userAsArray( User $user, int $privs ): array
-    {
-        return [
-            'id'                => $user->id,
-            'name'              => $user->name,
-            'username'          => $user->username,
-            'email'             => $user->email,
-            'custid'            => $user->custid,
-            'privs'             => $privs,
-            'enabled'           => !$user->disabled,
-        ];
-    }
 }

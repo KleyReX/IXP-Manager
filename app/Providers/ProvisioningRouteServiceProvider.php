@@ -93,6 +93,30 @@ class ProvisioningRouteServiceProvider extends ServiceProvider
     protected string $apiNamespace = 'IXP\Http\Controllers\Api\V4\Provisioning';
 
     /**
+     * Route parameters which are database ids, and so must be digits.
+     *
+     * Without the constraint, route model binding hands the value to MySQL, which casts a
+     * string to a number by its leading digits: GET vlan/1abc answered with VLAN 1, and a
+     * PATCH or DELETE of member/2abc would have changed member 2. With it, such a path is a
+     * 404. Applied to the whole group, so a route added later cannot forget it.
+     *
+     * @var array<string,string>
+     */
+    public const array NUMERIC_PARAMETERS = [
+        'cust'        => '[0-9]+',
+        'contact'     => '[0-9]+',
+        'u'           => '[0-9]+',
+        'vi'          => '[0-9]+',
+        'pi'          => '[0-9]+',
+        'vli'         => '[0-9]+',
+        'l2a'         => '[0-9]+',
+        'vlan'        => '[0-9]+',
+        'irrdbconfig' => '[0-9]+',
+        'location'    => '[0-9]+',
+        'cabinet'     => '[0-9]+',
+    ];
+
+    /**
      * Define the routes for the provisioning API.
      *
      * Called by the framework via loadRoutes().
@@ -112,6 +136,7 @@ class ProvisioningRouteServiceProvider extends ServiceProvider
             'middleware' => $this->middleware(),
             'namespace'  => $this->apiNamespace,
             'prefix'     => 'admin/api/v4/provisioning',
+            'where'      => self::NUMERIC_PARAMETERS,
         ], function() {
             require base_path( 'routes/apiv4-provisioning.php' );
         } );

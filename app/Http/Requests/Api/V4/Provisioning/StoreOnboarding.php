@@ -125,13 +125,29 @@ class StoreOnboarding extends FormRequest
     }
 
     /**
-     * Apply the defaults the connection section would get at its own endpoint.
+     * Strip keys which would shadow a route model, and apply the defaults the connection
+     * section would get at its own endpoint.
+     *
+     * The section rules come from StoreCustomer, StoreUser and StoreConnection instances built
+     * by create(), whose own prepareForValidation() never runs - so the key stripping those
+     * requests do at their dedicated endpoints has to happen here. The inherited web rules read
+     * $this->cust (Customer\Store: the unique shortname exemption and checkReseller) and
+     * $this->id (User\Store: the unique username exemption), and a body value of that name wins
+     * over a route parameter: 'member.cust' ended in a 500, 'user.id' exempted another user's
+     * username and ended on the database constraint.
      *
      * @return void
      */
     #[\Override]
     protected function prepareForValidation(): void
     {
+        foreach( [ 'member', 'user', 'connection' ] as $section ) {
+            if( is_array( $data = $this->input( $section ) ) && ( array_key_exists( 'cust', $data ) || array_key_exists( 'id', $data ) ) ) {
+                unset( $data[ 'cust' ], $data[ 'id' ] );
+                $this->merge( [ $section => $data ] );
+            }
+        }
+
         if( !$this->has( 'connection' ) ) {
             return;
         }
