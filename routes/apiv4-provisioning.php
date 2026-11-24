@@ -97,4 +97,9 @@ Route::post( 'onboarding', 'OnboardingController@store' )
 
 
 // ---- wave 1: reference data ---------------------------------------------
+Route::get(  'facility',                    'FacilityController@index'      )->name( 'api-v4-provisioning@facilities'          );
+Route::get(  'facility/{location}',         'FacilityController@show'       )->name( 'api-v4-provisioning@facility-show'       );
+Route::get(  'rack',                        'RackController@index'          )->name( 'api-v4-provisioning@racks'               );
+Route::get(  'rack/{cabinet}',              'RackController@show'           )->name( 'api-v4-provisioning@rack-show'           );
+Route::get(  'vendor',                      'VendorController@index'        )->name( 'api-v4-provisioning@vendors'             );
 
