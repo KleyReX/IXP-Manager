@@ -27,6 +27,7 @@ use Illuminate\Support\Facades\DB;
 use IXP\Models\IPv4Address;
 use IXP\Models\IPv6Address;
 use IXP\Models\Vlan;
+use IXP\Models\VlanInterface;
 use IXP\Support\Provisioning\IpAllocationException;
 use IXP\Support\Provisioning\IpAllocator;
 
@@ -220,5 +221,83 @@ class IpAllocatorTest extends TestCase
 
             $this->assertSame( $free->id, $claimed->id );
         } );
+    }
+
+    // ------------------------------------------------------------- claiming for an existing interface
+
+    /**
+     * A VLAN interface holding an address of each family.
+     */
+    private function dualStackInterface(): VlanInterface
+    {
+        $vli = VlanInterface::whereNotNull( 'ipv4addressid' )->whereNotNull( 'ipv6addressid' )->first();
+
+        if( !$vli ) {
+            $this->markTestSkipped( 'the CI dataset has no dual stack VLAN interface' );
+        }
+
+        return $vli;
+    }
+
+    /**
+     * A PATCH naming the interface's current address is not a request for somebody else's.
+     */
+    public function testAnInterfacesOwnAddressIsFreeForIt(): void
+    {
+        $vli = $this->dualStackInterface();
+
+        DB::transaction( function() use ( $vli ) {
+            $claimed = $this->allocator()->claim( $vli->vlan, $vli->ipv4address->address, false, $vli );
+
+            $this->assertSame( (int)$vli->ipv4addressid, $claimed->id );
+        } );
+    }
+
+    public function testAnInterfacesAddressIsStillTakenForAnotherInterface(): void
+    {
+        $vli   = $this->dualStackInterface();
+        $other = VlanInterface::where( 'id', '!=', $vli->id )->firstOrFail();
+
+        $this->expectException( IpAllocationException::class );
+        $this->expectExceptionMessageMatches( '/already assigned/' );
+
+        $this->allocator()->claim( $vli->vlan, $vli->ipv4address->address, false, $other );
+    }
+
+    /**
+     * "auto" asks for an address, not a different one: an interface which holds one in the VLAN
+     * keeps it, so that a retried PATCH does not walk through the pool.
+     */
+    public function testAutoKeepsTheAddressAnInterfaceHolds(): void
+    {
+        $vli = $this->dualStackInterface();
+
+        DB::transaction( function() use ( $vli ) {
+            $this->assertSame( (int)$vli->ipv4addressid, $this->allocator()->claim( $vli->vlan, 'auto', false, $vli )->id );
+            $this->assertSame( (int)$vli->ipv6addressid, $this->allocator()->claim( $vli->vlan, 'auto', true, $vli )->id );
+        } );
+    }
+
+    /**
+     * An address held in another VLAN is no help to an interface moving to this one: "auto"
+     * allocates a free address of this VLAN, and the old address is not accepted here.
+     */
+    public function testAnAddressHeldInAnotherVlanDoesNotCount(): void
+    {
+        $vli   = $this->dualStackInterface();
+        $other = Vlan::whereKeyNot( $vli->vlanid )->whereHas( 'ipv4Addresses' )->firstOrFail();
+
+        DB::transaction( function() use ( $vli, $other ) {
+            $auto = $this->allocator()->claim( $other, 'auto', false, $vli );
+            $next = $this->allocator()->nextFree( $other );
+
+            $this->assertSame( $other->id, (int)$auto->vlanid );
+            $this->assertSame( $next->id, $auto->id );
+        } );
+
+        $this->expectException( IpAllocationException::class );
+        $this->expectExceptionMessageMatches( '/not in the address pool/' );
+
+        $this->allocator()->claim( $other, $vli->ipv4address->address, false, $vli );
     }
 }
