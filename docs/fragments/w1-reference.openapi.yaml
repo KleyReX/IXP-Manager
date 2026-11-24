@@ -1,0 +1,1302 @@
+# Fragment of docs/provisioning-api.openapi.yaml - wave 1, work package "reference data".
+#
+# Merge notes:
+#
+#   Paths REPLACED (same path, whole entry): /switch, /infrastructure, /vlan/{vlan}/address.
+#     Each keeps every field, parameter and default it had; the changes are additive. The
+#     /vlan/{vlan}/address description also drops the claim that pools are filled by
+#     `ipv4:generate` / `ipv6:generate` - no such commands exist in this code base.
+#   Paths ADDED: /vlan, /vlan/{vlan}, /irrdb-source, /irrdb-source/{irrdbconfig}, /facility,
+#     /facility/{location}, /rack, /rack/{cabinet}, /vendor.
+#
+#   Schemas REPLACED (same name, whole entry): Switch, Vlan, Infrastructure, Address,
+#     VlanAddressListing - the old fields are all still there and still required.
+#   Schemas ADDED: VlanDetail, NetworkInfo, AddressHolder, IrrdbSource, IrrdbSourceInput,
+#     IrrdbSourceResult, Facility, Rack, Vendor.
+#
+#   Elsewhere in the main file:
+#   - components/responses/NotFound names the route parameters which can be unknown; it gains
+#     `irrdbconfig`, `location` and `cabinet`.
+#   - The Discovery tag describes read-only lookups; POST /irrdb-source is tagged Discovery
+#     too, as the one idempotent find-or-create among them. Retitle the tag if preferred.
+#   - Path parameters other than `vlan` are declared inline rather than under
+#     components/parameters, so that this fragment only needs `paths` and `components/schemas`.
+
+paths:
+
+  /switch:
+    get:
+      tags: [ Discovery ]
+      operationId: listSwitches
+      summary: List the switches - the active ones unless asked otherwise
+      description: |
+        Without parameters: every switch with `active = true`, ordered by name - exactly what
+        this endpoint has always returned - so that a caller can resolve a switch name to the
+        id `switch` expects when creating a connection rather than guessing. A port on an
+        inactive switch would produce a connection which appears in neither the switch
+        configuration nor the grapher, so that is the default.
+
+        `active=0` lists the switches out of service, and `active=all` every switch. Without it
+        a switch somebody has just deactivated simply vanishes from the listing, which looks
+        the same as a deletion. A `NULL` in the column counts as inactive, as it does for
+        `/port/free` and for orders: every switch appears under exactly one of `1` and `0`.
+
+        `rack`, `facility` and `vendor` resolve through `/rack`, `/facility` and `/vendor`. A
+        switch reaches its facility only through its rack (`switch.cabinetid` ->
+        `cabinet.locationid`). The SNMP community is never part of the response, nor are the
+        columns the SNMP poll maintains.
+
+        Built by `SwitchPresenter`.
+      parameters:
+        - name: active
+          in: query
+          required: false
+          description: |
+            `1` for the active switches (the default), `0` for the inactive ones, `all` for
+            both.
+          schema:
+            type: string
+            enum: [ '1', '0', all ]
+            default: '1'
+          example: all
+        - name: infrastructure
+          in: query
+          required: false
+          description: Restrict to one infrastructure id. Must exist in `infrastructure.id`.
+          schema:
+            type: integer
+            minimum: 1
+          example: 1
+      responses:
+        '200':
+          description: The switches.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ switches ]
+                properties:
+                  switches:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Switch'
+              example:
+                switches:
+                  - id: 5
+                    name: vc501
+                    infrastructure: 1
+                    hostname: vc501.kleyrex.net
+                    active: true
+                    rack: 3
+                    facility: 2
+                    vendor: 12
+                  - id: 13
+                    name: vc513
+                    infrastructure: 1
+                    hostname: vc513.kleyrex.net
+                    active: true
+                    rack: 7
+                    facility: 4
+                    vendor: 12
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          description: |
+            A query parameter failed validation - `active` other than `1`, `0` or `all`, or an
+            `infrastructure` id which does not exist.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+              example:
+                message: The selected active is invalid.
+                errors:
+                  active:
+                    - The selected active is invalid.
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /infrastructure:
+    get:
+      tags: [ Discovery ]
+      operationId: listInfrastructures
+      summary: List the infrastructures and their VLANs
+      description: |
+        All infrastructures, ordered by name, each with the VLANs attached to it in id order. A
+        caller needs the VLAN `id` (not the 802.1Q tag `number`) for the `vlanid` field of a
+        connection; at KleyReX the peering VLAN carries tag 900 and has id 1.
+
+        `country`, `ixf_ix_id`, `peeringdb_ix_id` and `exclude_from_ixf_export` were added
+        later, next to the original fields: the identifiers under which the exchange is known
+        to PeeringDB and the IX-F database. The nested VLANs carry the same representation as
+        `GET /vlan`, including the `private` and `export_to_ixf` flags.
+
+        Built by `InfrastructurePresenter`.
+      responses:
+        '200':
+          description: The infrastructures and their VLANs.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ infrastructures ]
+                properties:
+                  infrastructures:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Infrastructure'
+              example:
+                infrastructures:
+                  - id: 1
+                    name: KleyReX
+                    shortname: kleyrex
+                    isPrimary: true
+                    vlans:
+                      - id: 1
+                        name: Peering LAN
+                        number: 900
+                        infrastructure: 1
+                        private: false
+                        config_name: peering
+                        export_to_ixf: true
+                        peering_matrix: true
+                        peering_manager: true
+                    country: DE
+                    ixf_ix_id: 74
+                    peeringdb_ix_id: 64
+                    exclude_from_ixf_export: false
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /vlan:
+    get:
+      tags: [ Discovery ]
+      operationId: listVlans
+      summary: List the VLANs with the flags an order depends on
+      description: |
+        A connection names its VLAN by id. Only `private` and `export_to_ixf` tell the public
+        peering LAN from a private or a quarantine VLAN, so a caller should check them before
+        it orders; before this endpoint the API gave it nothing to check.
+
+        Ordered by 802.1Q tag, as the web list is, then by id. The filters combine. `private`
+        uses the model scopes the web UI uses (`privateOnly()` / `publicOnly()`); `export_to_ixf`
+        filters on the column of that name.
+
+        Built by `VlanPresenter` - the same representation as the VLANs nested in
+        `GET /infrastructure` and the header of `GET /vlan/{vlan}/address`.
+      parameters:
+        - name: infrastructure
+          in: query
+          required: false
+          description: Restrict to one infrastructure id. Must exist in `infrastructure.id`.
+          schema:
+            type: integer
+            minimum: 1
+          example: 1
+        - name: private
+          in: query
+          required: false
+          description: '`1` for private VLANs only, `0` for the others. `true` / `false` are refused.'
+          schema:
+            type: integer
+            enum: [ 0, 1 ]
+          example: 0
+        - name: export_to_ixf
+          in: query
+          required: false
+          description: '`1` for VLANs included in the IX-F export, `0` for the others.'
+          schema:
+            type: integer
+            enum: [ 0, 1 ]
+          example: 1
+      responses:
+        '200':
+          description: The VLANs.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ vlans ]
+                properties:
+                  vlans:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Vlan'
+              example:
+                vlans:
+                  - id: 1
+                    name: Peering LAN
+                    number: 900
+                    infrastructure: 1
+                    private: false
+                    config_name: peering
+                    export_to_ixf: true
+                    peering_matrix: true
+                    peering_manager: true
+                  - id: 3
+                    name: Quarantine LAN
+                    number: 901
+                    infrastructure: 1
+                    private: false
+                    config_name: quarantine
+                    export_to_ixf: false
+                    peering_matrix: false
+                    peering_manager: false
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          description: |
+            A query parameter failed validation - an `infrastructure` id which does not exist,
+            or a flag other than `0` or `1`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+              example:
+                message: The private field must be true or false.
+                errors:
+                  private:
+                    - The private field must be true or false.
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /vlan/{vlan}:
+    parameters:
+      - $ref: '#/components/parameters/VlanId'
+    get:
+      tags: [ Discovery ]
+      operationId: showVlan
+      summary: Read a VLAN, with its network information per protocol
+      description: |
+        The VLAN as `GET /vlan` lists it, plus `network_info`: the subnet and prefix length per
+        protocol, as members see them on their dashboard and the IX-F export publishes them.
+
+        Both keys of `network_info` are always present; a protocol without network information
+        is `null`. The web UI allows one row per VLAN and protocol
+        (`NetworkInfoController::checkIsDuplicate()`), but the schema does not enforce it.
+        Should there be two, the newer is reported - also the one `NetworkInfo::vlanProtocol()`,
+        and hence the member dashboard, ends up with.
+      responses:
+        '200':
+          description: The VLAN.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ vlan ]
+                properties:
+                  vlan:
+                    $ref: '#/components/schemas/VlanDetail'
+              example:
+                vlan:
+                  id: 1
+                  name: Peering LAN
+                  number: 900
+                  infrastructure: 1
+                  private: false
+                  config_name: peering
+                  export_to_ixf: true
+                  peering_matrix: true
+                  peering_manager: true
+                  network_info:
+                    ipv4:
+                      id: 1
+                      protocol: 4
+                      network: 193.189.82.0
+                      masklen: 23
+                    ipv6:
+                      id: 2
+                      protocol: 6
+                      network: '2001:7f8:33::'
+                      masklen: 64
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /vlan/{vlan}/address:
+    get:
+      tags: [ Discovery ]
+      operationId: listVlanAddresses
+      summary: List a VLAN's address pool - free or in use, and by whom
+      description: |
+        Lists the addresses which exist in the VLAN's pool, ordered numerically
+        (`INET_ATON` / `INET6_ATON`, so `.10` does not sort before `.9`), each flagged with
+        whether a VLAN interface points at it. An address in use names its holder in
+        `assigned_to` - member, connection, VLAN interface and hostname, the columns the web
+        address list shows - and `assigned_to` is `null` for a free one.
+
+        Addresses are added to a pool ahead of time, in the web UI. This endpoint never creates
+        one, and there is deliberately no endpoint which reserves one - a caller which simply
+        wants the next free address asks for `"auto"` when creating the connection.
+
+        `network` restricts the listing to one network, given as `address/length` or as a bare
+        address (that one address - "who holds it?" in one call):
+
+        - It implies the protocol: the other family is left out of the response, just as
+          `protocol` leaves it out. A `protocol` which contradicts it is `422`.
+        - It has to start at its first address. `10.0.0.5/24` is refused, and the message names
+          `10.0.0.0/24` - the web UI's delete-by-network form insists on the same.
+        - Any prefix length is accepted, unlike that form's /24 (IPv6: /120): a filter
+          enumerates nothing, it compares the numeric forms, so the notation of a stored IPv6
+          address does not matter either.
+
+        `total` counts the whole matching set, after `free` and `network`; `truncated` says
+        whether `limit` cut it short. Everything since the first release - `assigned_to`,
+        `network`, the VLAN flags in the header - is additive.
+      parameters:
+        - $ref: '#/components/parameters/VlanId'
+        - name: protocol
+          in: query
+          required: false
+          description: |
+            Restrict to one address family. Omitted, both `ipv4` and `ipv6` are returned -
+            unless `network` names one.
+          schema:
+            type: integer
+            enum: [ 4, 6 ]
+          example: 4
+        - name: free
+          in: query
+          required: false
+          description: When true, list only addresses no VLAN interface points at.
+          schema:
+            type: boolean
+            default: false
+          example: true
+        - name: limit
+          in: query
+          required: false
+          description: Cap the number of addresses returned **per protocol**.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 2000
+            default: 200
+          example: 5
+        - name: network
+          in: query
+          required: false
+          description: |
+            Only the addresses inside this network: `address/length`, or a bare address. Must
+            start at its first address.
+          schema:
+            type: string
+            maxLength: 255
+          examples:
+            ipv4:
+              value: 193.189.82.0/26
+            ipv6:
+              value: '2001:7f8:33::/120'
+            single:
+              value: 193.189.82.102
+      responses:
+        '200':
+          description: |
+            The VLAN and its addresses. `ipv4` is absent when `protocol=6` was requested or
+            `network` is an IPv6 network, `ipv6` when `protocol=4` was or `network` is IPv4.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VlanAddressListing'
+              example:
+                vlan:
+                  id: 1
+                  name: Peering LAN
+                  number: 900
+                  infrastructure: 1
+                  private: false
+                  config_name: peering
+                  export_to_ixf: true
+                  peering_matrix: true
+                  peering_manager: true
+                ipv4:
+                  addresses:
+                    - id: 341
+                      address: 193.189.82.101
+                      free: true
+                      assigned_to: null
+                    - id: 342
+                      address: 193.189.82.102
+                      free: false
+                      assigned_to:
+                        custid: 97
+                        member_name: Example Networks GmbH
+                        connection: 501
+                        vlan_interface: 733
+                        hostname: example.peering.kleyrex.net
+                  total: 2
+                  truncated: false
+                ipv6:
+                  addresses:
+                    - id: 902
+                      address: '2001:7f8:33::a101:2586:1'
+                      free: true
+                      assigned_to: null
+                  total: 1
+                  truncated: false
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          description: |
+            A query parameter failed validation: a `protocol` other than 4 or 6, a `limit`
+            outside 1..2000, a `network` which is not one or does not start at its first
+            address, or a `network` of the other family than `protocol`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+              example:
+                message: The network does not start at its first address. Did you mean 193.189.82.0/24?
+                errors:
+                  network:
+                    - The network does not start at its first address. Did you mean 193.189.82.0/24?
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /irrdb-source:
+    get:
+      tags: [ Discovery ]
+      operationId: listIrrdbSources
+      summary: List the IRRDB sources
+      description: |
+        A member refers to its IRRDB source by id - `irrdb` in the member payload - while
+        PeeringDB names it in its `irr_as_set`, as in `RIPE::AS-EXAMPLE`. This is how a caller
+        turns the one into the other. Ordered by host, as the web list is, then by source.
+      responses:
+        '200':
+          description: The IRRDB sources.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ irrdb_sources ]
+                properties:
+                  irrdb_sources:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/IrrdbSource'
+              example:
+                irrdb_sources:
+                  - id: 2
+                    host: whois.radb.net
+                    source: RADB
+                    notes: RADB Query from RADB Database
+                    member_count: 31
+                    created_at: null
+                    updated_at: null
+                  - id: 1
+                    host: whois.radb.net
+                    source: RIPE
+                    notes: RIPE Query from RIPE Database
+                    member_count: 187
+                    created_at: null
+                    updated_at: null
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+    post:
+      tags: [ Discovery ]
+      operationId: findOrCreateIrrdbSource
+      summary: Find or create an IRRDB source
+      description: |
+        **A find-or-create, not a plain insert.** When a source with the same `host` and the
+        same `source` exists already, it is returned with `200` and `created: false` -
+        unchanged; `notes` in the request is not applied to it. Otherwise it is created and
+        returned with `201` and `created: true`. A caller can send this whenever it needs a
+        source id, without looking first, and retry it freely.
+
+        - The match ignores case - host names are case-insensitive, and so are IRR source names
+          to bgpq3/bgpq4 - but is otherwise literal: `RADB,RIPE` and `RIPE,RADB` are different
+          sources, since the order of a source list is the order of preference.
+        - There is no `protocol`: the column was dropped in 2021
+          (`2021_09_17_144421_modernise_irrdb_conf_table`).
+        - Neither the web UI nor the schema keeps sources unique. The look-up is a locking read
+          in the same transaction as the insert, so two simultaneous requests for the same new
+          source do not both create it: under MySQL's default isolation level (REPEATABLE READ)
+          the second waits for the first and finds its row. Where duplicates exist already, the
+          oldest is returned.
+
+        Validated as the web form `IrrdbConfigController@store` validates - inline in its
+        controller, so `StoreIrrdbSource` reproduces the rules and a behavioural test holds it
+        to the web form. Two deliberate differences: `notes` is validated (the web form stores
+        it unchecked), and a non-string `host` is `422` where the web form fails with a 500.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IrrdbSourceInput'
+            example:
+              host: whois.radb.net
+              source: ALTDB
+              notes: for AS-EXAMPLE
+      responses:
+        '201':
+          description: The source did not exist and has been created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IrrdbSourceResult'
+              example:
+                irrdb_source:
+                  id: 14
+                  host: whois.radb.net
+                  source: ALTDB
+                  notes: for AS-EXAMPLE
+                  member_count: 0
+                  created_at: '2026-11-24T10:00:00+00:00'
+                  updated_at: '2026-11-24T10:00:00+00:00'
+                created: true
+        '200':
+          description: |
+            A source with this host and source list existed already. It is returned unchanged.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IrrdbSourceResult'
+              example:
+                irrdb_source:
+                  id: 1
+                  host: whois.radb.net
+                  source: RIPE
+                  notes: RIPE Query from RIPE Database
+                  member_count: 187
+                  created_at: null
+                  updated_at: null
+                created: false
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          description: The payload failed validation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+              example:
+                message: The host is not valid.
+                errors:
+                  host:
+                    - The host is not valid.
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /irrdb-source/{irrdbconfig}:
+    parameters:
+      - name: irrdbconfig
+        in: path
+        required: true
+        description: |
+          The source's `irrdbconfig.id` - the value of a member's `irrdb`. Resolved by route
+          model binding, so an unknown id is `404`.
+        schema:
+          type: integer
+          minimum: 1
+        example: 1
+    get:
+      tags: [ Discovery ]
+      operationId: showIrrdbSource
+      summary: Read an IRRDB source
+      responses:
+        '200':
+          description: The IRRDB source.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ irrdb_source ]
+                properties:
+                  irrdb_source:
+                    $ref: '#/components/schemas/IrrdbSource'
+              example:
+                irrdb_source:
+                  id: 1
+                  host: whois.radb.net
+                  source: RIPE
+                  notes: RIPE Query from RIPE Database
+                  member_count: 187
+                  created_at: null
+                  updated_at: null
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /facility:
+    get:
+      tags: [ Discovery ]
+      operationId: listFacilities
+      summary: List the facilities
+      description: |
+        The facilities (data centres) the exchange is present in, by name as the web list
+        orders them. The schema calls a facility a *location*; the API uses the word of the web
+        UI. A switch is placed in a facility through its rack: `GET /rack?facility=` lists the
+        racks of one, and every switch names both its rack and its facility.
+      responses:
+        '200':
+          description: The facilities.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ facilities ]
+                properties:
+                  facilities:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Facility'
+              example:
+                facilities:
+                  - id: 2
+                    name: Equinix FR5
+                    shortname: fr5
+                    tag: FR5
+                    address: Kleyerstrasse 90, 60326 Frankfurt
+                    city: Frankfurt
+                    country: DE
+                    pdb_facility_id: 58
+                    nocphone: '+49 69 1234567'
+                    nocfax: null
+                    nocemail: noc@example.net
+                    officephone: null
+                    officefax: null
+                    officeemail: null
+                    notes: null
+                    created_at: '2024-02-01T09:00:00+00:00'
+                    updated_at: '2025-06-12T14:30:00+00:00'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /facility/{location}:
+    parameters:
+      - name: location
+        in: path
+        required: true
+        description: |
+          The facility's `location.id`. Resolved by route model binding, so an unknown id is
+          `404`.
+        schema:
+          type: integer
+          minimum: 1
+        example: 2
+    get:
+      tags: [ Discovery ]
+      operationId: showFacility
+      summary: Read a facility
+      description: The facility as `GET /facility` lists it.
+      responses:
+        '200':
+          description: The facility.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ facility ]
+                properties:
+                  facility:
+                    $ref: '#/components/schemas/Facility'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /rack:
+    get:
+      tags: [ Discovery ]
+      operationId: listRacks
+      summary: List the racks
+      description: |
+        The racks, by name as the web list orders them. The schema calls a rack a *cabinet*;
+        the API uses the word of the web UI. A rack is the link between a switch and its
+        facility.
+      parameters:
+        - name: facility
+          in: query
+          required: false
+          description: Restrict to the racks of one facility id. Must exist in `location.id`.
+          schema:
+            type: integer
+            minimum: 1
+          example: 2
+      responses:
+        '200':
+          description: The racks.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ racks ]
+                properties:
+                  racks:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Rack'
+              example:
+                racks:
+                  - id: 3
+                    name: FR5-R0815
+                    facility: 2
+                    colocation: 'FR5:0101:0815'
+                    height: 47
+                    type: 19 inch
+                    u_counts_from: 2
+                    notes: null
+                    created_at: '2024-02-01T09:00:00+00:00'
+                    updated_at: '2024-02-01T09:00:00+00:00'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          description: A `facility` id which does not exist.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ValidationError'
+              example:
+                message: The selected facility is invalid.
+                errors:
+                  facility:
+                    - The selected facility is invalid.
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /rack/{cabinet}:
+    parameters:
+      - name: cabinet
+        in: path
+        required: true
+        description: |
+          The rack's `cabinet.id`. Resolved by route model binding, so an unknown id is `404`.
+        schema:
+          type: integer
+          minimum: 1
+        example: 3
+    get:
+      tags: [ Discovery ]
+      operationId: showRack
+      summary: Read a rack
+      description: The rack as `GET /rack` lists it.
+      responses:
+        '200':
+          description: The rack.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ rack ]
+                properties:
+                  rack:
+                    $ref: '#/components/schemas/Rack'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /vendor:
+    get:
+      tags: [ Discovery ]
+      operationId: listVendors
+      summary: List the equipment vendors
+      description: |
+        The vendors a switch refers to by id, by name as the web list orders them. There is no
+        show endpoint: the list carries every field.
+      responses:
+        '200':
+          description: The vendors.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ vendors ]
+                properties:
+                  vendors:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Vendor'
+              example:
+                vendors:
+                  - id: 12
+                    name: Juniper Networks
+                    shortname: Juniper
+                    bundle_name: ae
+                    created_at: null
+                    updated_at: null
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+components:
+
+  schemas:
+
+    Switch:
+      type: object
+      title: Switch
+      description: |
+        A switch. Built by `SwitchPresenter`. The first four fields are the original ones;
+        `active`, `rack`, `facility` and `vendor` were added next to them. `snmppasswd` is never
+        included.
+      required: [ id, name, infrastructure, hostname, active, rack, facility, vendor ]
+      properties:
+        id:
+          type: integer
+          description: '`switch.id` - the value the `switch` field of a connection expects.'
+        name:
+          type: [ string, 'null' ]
+          description: Short name, for example `vc513`.
+        infrastructure:
+          type: [ integer, 'null' ]
+          description: '`infrastructure.id` this switch belongs to.'
+        hostname:
+          type: [ string, 'null' ]
+        active:
+          type: boolean
+          description: |
+            Whether the switch is in service. `NULL` in the column is reported as `false`. Only
+            active switches are polled and offered for orders.
+        rack:
+          type: [ integer, 'null' ]
+          description: '`cabinet.id` of the rack the switch stands in - see `GET /rack/{cabinet}`.'
+        facility:
+          type: [ integer, 'null' ]
+          description: '`location.id` of that rack''s facility - see `GET /facility/{location}`.'
+        vendor:
+          type: [ integer, 'null' ]
+          description: '`vendor.id` - see `GET /vendor`.'
+      examples:
+        - id: 13
+          name: vc513
+          infrastructure: 1
+          hostname: vc513.kleyrex.net
+          active: true
+          rack: 7
+          facility: 4
+          vendor: 12
+
+    Vlan:
+      type: object
+      title: Vlan
+      description: |
+        A VLAN, as every endpoint reports it - `GET /vlan`, the VLANs nested in
+        `GET /infrastructure`, the header of `GET /vlan/{vlan}/address`. Built by
+        `VlanPresenter`. `id`, `name` and `number` are the original fields; the flags were added
+        next to them.
+      required: [ id, name, number, infrastructure, private, config_name, export_to_ixf, peering_matrix, peering_manager ]
+      properties:
+        id:
+          type: integer
+          description: '`vlan.id` - the value the `vlanid` field of a connection expects.'
+        name:
+          type: [ string, 'null' ]
+        number:
+          type: [ integer, 'null' ]
+          description: The 802.1Q tag. At KleyReX, 900 for the peering LAN.
+        infrastructure:
+          type: integer
+          description: '`infrastructure.id` the VLAN belongs to.'
+        private:
+          type: boolean
+          description: A private VLAN between members, not a peering LAN.
+        config_name:
+          type: [ string, 'null' ]
+          description: The name switch automation knows the VLAN by.
+        export_to_ixf:
+          type: boolean
+          description: |
+            Whether the VLAN is part of the IX-F export - false for a quarantine VLAN, for
+            example.
+        peering_matrix:
+          type: boolean
+        peering_manager:
+          type: boolean
+      examples:
+        - id: 1
+          name: Peering LAN
+          number: 900
+          infrastructure: 1
+          private: false
+          config_name: peering
+          export_to_ixf: true
+          peering_matrix: true
+          peering_manager: true
+
+    VlanDetail:
+      title: VlanDetail
+      description: A VLAN with its network information per protocol - `GET /vlan/{vlan}`.
+      allOf:
+        - $ref: '#/components/schemas/Vlan'
+        - type: object
+          required: [ network_info ]
+          properties:
+            network_info:
+              type: object
+              description: Both keys are always present; `null` where the protocol has no network information.
+              required: [ ipv4, ipv6 ]
+              properties:
+                ipv4:
+                  oneOf:
+                    - $ref: '#/components/schemas/NetworkInfo'
+                    - type: 'null'
+                ipv6:
+                  oneOf:
+                    - $ref: '#/components/schemas/NetworkInfo'
+                    - type: 'null'
+
+    NetworkInfo:
+      type: object
+      title: NetworkInfo
+      description: |
+        The subnet of a VLAN for one protocol. Built by `NetworkInfoPresenter`. The legacy
+        columns `rs1address`, `rs2address` and `dnsfile` are not reported.
+      required: [ id, protocol, network, masklen ]
+      properties:
+        id:
+          type: integer
+          description: '`networkinfo.id`.'
+        protocol:
+          type: integer
+          enum: [ 4, 6 ]
+        network:
+          type: [ string, 'null' ]
+          description: The network address, for example `193.189.82.0`.
+        masklen:
+          type: [ integer, 'null' ]
+          description: The prefix length, for example `23`.
+
+    Infrastructure:
+      type: object
+      title: Infrastructure
+      description: |
+        An infrastructure and the VLANs attached to it. Built by `InfrastructurePresenter`.
+        `country`, `ixf_ix_id`, `peeringdb_ix_id` and `exclude_from_ixf_export` were added next
+        to the original fields.
+      required: [ id, name, shortname, isPrimary, vlans, country, ixf_ix_id, peeringdb_ix_id, exclude_from_ixf_export ]
+      properties:
+        id:
+          type: integer
+        name:
+          type: [ string, 'null' ]
+        shortname:
+          type: [ string, 'null' ]
+        isPrimary:
+          type: boolean
+        vlans:
+          type: array
+          description: In id order.
+          items:
+            $ref: '#/components/schemas/Vlan'
+        country:
+          type: [ string, 'null' ]
+          description: ISO 3166-1 alpha-2 country code.
+        ixf_ix_id:
+          type: [ integer, 'null' ]
+          description: The exchange's id in the IX-F database.
+        peeringdb_ix_id:
+          type: [ integer, 'null' ]
+          description: The exchange's id at PeeringDB.
+        exclude_from_ixf_export:
+          type: boolean
+
+    Address:
+      type: object
+      title: Address
+      description: |
+        One address from a VLAN's pool. Built by `IpAddressPresenter`. Pools are filled ahead of
+        time; this API never mints an address, it only claims an existing, unclaimed one.
+      required: [ id, address, free, assigned_to ]
+      properties:
+        id:
+          type: integer
+          description: '`ipv4address.id` or `ipv6address.id`.'
+        address:
+          type: string
+          description: The address exactly as stored.
+        free:
+          type: boolean
+          description: True when no VLAN interface points at this address.
+        assigned_to:
+          description: Who holds the address; `null` exactly when `free` is true.
+          oneOf:
+            - $ref: '#/components/schemas/AddressHolder'
+            - type: 'null'
+      examples:
+        - id: 341
+          address: 193.189.82.101
+          free: true
+          assigned_to: null
+        - id: 342
+          address: 193.189.82.102
+          free: false
+          assigned_to:
+            custid: 97
+            member_name: Example Networks GmbH
+            connection: 501
+            vlan_interface: 733
+            hostname: example.peering.kleyrex.net
+
+    AddressHolder:
+      type: object
+      title: AddressHolder
+      description: |
+        The VLAN interface an address is assigned to, and the member and connection behind it -
+        the columns the web address list shows next to each address.
+      required: [ custid, member_name, connection, vlan_interface, hostname ]
+      properties:
+        custid:
+          type: [ integer, 'null' ]
+          description: '`cust.id` of the member - see `GET /member/{cust}`.'
+        member_name:
+          type: [ string, 'null' ]
+        connection:
+          type: [ integer, 'null' ]
+          description: '`virtualinterface.id` - the id `DELETE /connection/{vi}` takes.'
+        vlan_interface:
+          type: integer
+          description: '`vlaninterface.id`.'
+        hostname:
+          type: [ string, 'null' ]
+          description: The VLAN interface's hostname for this address family.
+
+    VlanAddressListing:
+      type: object
+      title: VlanAddressListing
+      description: |
+        The response of `GET /vlan/{vlan}/address`. `ipv4` is omitted when `protocol=6` was
+        asked for or `network` is an IPv6 network, `ipv6` when `protocol=4` was or `network`
+        is an IPv4 network.
+      required: [ vlan ]
+      properties:
+        vlan:
+          $ref: '#/components/schemas/Vlan'
+        ipv4:
+          $ref: '#/components/schemas/AddressList'
+        ipv6:
+          $ref: '#/components/schemas/AddressList'
+
+    IrrdbSource:
+      type: object
+      title: IrrdbSource
+      description: |
+        An IRRDB source: the whois host and the source list bgpq3/bgpq4 query for a member's
+        prefixes. Built by `IrrdbSourcePresenter`.
+      required: [ id, host, source, notes, member_count, created_at, updated_at ]
+      properties:
+        id:
+          type: integer
+          description: '`irrdbconfig.id` - the value of a member''s `irrdb`.'
+        host:
+          type: [ string, 'null' ]
+          description: The whois host, for example `whois.radb.net`.
+        source:
+          type: [ string, 'null' ]
+          description: The source list, comma-separated in order of preference, for example `RADB,RIPE`.
+        notes:
+          type: [ string, 'null' ]
+        member_count:
+          type: integer
+          description: |
+            Members referring to the source, departed members included - the count the web UI
+            checks before it lets a source be deleted.
+        created_at:
+          type: [ string, 'null' ]
+          format: date-time
+        updated_at:
+          type: [ string, 'null' ]
+          format: date-time
+
+    IrrdbSourceInput:
+      type: object
+      title: IrrdbSourceInput
+      description: |
+        `host` and `source` as the web form validates them; `notes` is validated here although
+        the web form does not. Any other field is ignored.
+      required: [ host, source ]
+      properties:
+        host:
+          type: string
+          maxLength: 255
+          description: A host name (international names allowed), checked by `IdnValidate`.
+        source:
+          type: string
+          maxLength: 255
+        notes:
+          type: [ string, 'null' ]
+          description: Stored on creation only - not applied to a source which exists already.
+
+    IrrdbSourceResult:
+      type: object
+      title: IrrdbSourceResult
+      description: The response of `POST /irrdb-source`, `201` and `200` alike.
+      required: [ irrdb_source, created ]
+      properties:
+        irrdb_source:
+          $ref: '#/components/schemas/IrrdbSource'
+        created:
+          type: boolean
+          description: True with `201`, when the source was created; false with `200`, when it existed.
+
+    Facility:
+      type: object
+      title: Facility
+      description: |
+        A facility (data centre); `location` in the schema. Built by `FacilityPresenter`, with
+        the fields of the web view.
+      required:
+        - id
+        - name
+        - shortname
+        - tag
+        - address
+        - city
+        - country
+        - pdb_facility_id
+        - nocphone
+        - nocfax
+        - nocemail
+        - officephone
+        - officefax
+        - officeemail
+        - notes
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: integer
+          description: '`location.id`.'
+        name:
+          type: [ string, 'null' ]
+        shortname:
+          type: [ string, 'null' ]
+        tag:
+          type: [ string, 'null' ]
+        address:
+          type: [ string, 'null' ]
+        city:
+          type: [ string, 'null' ]
+        country:
+          type: [ string, 'null' ]
+          description: ISO 3166-1 alpha-2 country code.
+        pdb_facility_id:
+          type: [ integer, 'null' ]
+          description: The facility's id at PeeringDB.
+        nocphone:
+          type: [ string, 'null' ]
+        nocfax:
+          type: [ string, 'null' ]
+        nocemail:
+          type: [ string, 'null' ]
+        officephone:
+          type: [ string, 'null' ]
+        officefax:
+          type: [ string, 'null' ]
+        officeemail:
+          type: [ string, 'null' ]
+        notes:
+          type: [ string, 'null' ]
+        created_at:
+          type: [ string, 'null' ]
+          format: date-time
+        updated_at:
+          type: [ string, 'null' ]
+          format: date-time
+
+    Rack:
+      type: object
+      title: Rack
+      description: |
+        A rack; `cabinet` in the schema. Built by `RackPresenter`, with the fields of the web
+        view.
+      required: [ id, name, facility, colocation, height, type, u_counts_from, notes, created_at, updated_at ]
+      properties:
+        id:
+          type: integer
+          description: '`cabinet.id` - what a switch names as its `rack`.'
+        name:
+          type: [ string, 'null' ]
+        facility:
+          type: [ integer, 'null' ]
+          description: '`location.id` of the facility the rack stands in.'
+        colocation:
+          type: [ string, 'null' ]
+          description: The colocation provider's reference for the rack.
+        height:
+          type: [ integer, 'null' ]
+          description: Height in rack units.
+        type:
+          type: [ string, 'null' ]
+        u_counts_from:
+          type: [ integer, 'null' ]
+          enum: [ 1, 2, null ]
+          description: '`1` when the units count from the top, `2` from the bottom.'
+        notes:
+          type: [ string, 'null' ]
+        created_at:
+          type: [ string, 'null' ]
+          format: date-time
+        updated_at:
+          type: [ string, 'null' ]
+          format: date-time
+
+    Vendor:
+      type: object
+      title: Vendor
+      description: An equipment vendor. Built by `VendorPresenter`.
+      required: [ id, name, shortname, bundle_name, created_at, updated_at ]
+      properties:
+        id:
+          type: integer
+          description: '`vendor.id` - what a switch names as its `vendor`.'
+        name:
+          type: [ string, 'null' ]
+        shortname:
+          type: [ string, 'null' ]
+        bundle_name:
+          type: [ string, 'null' ]
+          description: The vendor's name for a link aggregation interface, for example `ae` or `Port-Channel`.
+        created_at:
+          type: [ string, 'null' ]
+          format: date-time
+        updated_at:
+          type: [ string, 'null' ]
+          format: date-time
