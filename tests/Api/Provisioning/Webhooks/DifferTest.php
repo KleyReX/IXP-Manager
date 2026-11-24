@@ -130,6 +130,23 @@ class DifferTest extends TestCase
     }
 
     /**
+     * Only an integer or a string is an id. A list whose "ids" are booleans or floats is compared
+     * as one value, rather than keyed by whatever PHP makes of them as array keys.
+     */
+    public function testListsWithOtherIdTypesAreOneValue(): void
+    {
+        $this->assertSame(
+            [ [ 'path' => '/items', 'old' => [ [ 'id' => 2.0 ] ], 'new' => [ [ 'id' => 3.0 ] ] ] ],
+            Differ::diff( [ 'items' => [ [ 'id' => 2.0 ] ] ], [ 'items' => [ [ 'id' => 3.0 ] ] ] )
+        );
+
+        $this->assertSame(
+            [ [ 'path' => '/items', 'old' => [ [ 'id' => true ] ], 'new' => [ [ 'id' => false ] ] ] ],
+            Differ::diff( [ 'items' => [ [ 'id' => true ] ] ], [ 'items' => [ [ 'id' => false ] ] ] )
+        );
+    }
+
+    /**
      * updated_at is ignored wherever it is; resources add their own bookkeeping paths, with `*`
      * standing for one segment.
      */
