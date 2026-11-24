@@ -2099,6 +2099,11 @@ components:
         authorisedMobile:
           type: [ string, 'null' ]
           maxLength: 50
+          description: |
+            The inherited rule accepts up to 50 characters, but the `user.authorisedMobile`
+            column is `varchar(30)` and the database connection runs with strict mode off: on
+            v7.4 anything beyond 30 characters is **silently cut to 30**. Send at most 30.
+            (Upstream `main` limits the field to 25 characters and a phone number format.)
         privs:
           type: integer
           enum: [ 1, 2, 3 ]
