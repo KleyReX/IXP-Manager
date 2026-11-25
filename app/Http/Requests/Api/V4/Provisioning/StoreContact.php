@@ -29,6 +29,7 @@ use Illuminate\Support\Arr;
 
 use IXP\Models\Customer;
 use IXP\Models\User;
+use IXP\Rules\IsPhone;
 
 /**
  * Provisioning API - StoreContact request
@@ -94,16 +95,16 @@ class StoreContact extends FormRequest
     /**
      * ContactController::checkForm()'s rules for a superuser, reproduced.
      *
-     * @return array<string,string>
+     * @return array<string,string|array>
      */
     public static function webRules(): array
     {
         return [
             'name'                  => 'required|string|max:255',
             'position'              => 'nullable|string|max:255',
-            'email'                 => 'nullable|email',
-            'phone'                 => 'nullable|string|max:50',
-            'mobile'                => 'nullable|string|max:50',
+            'email'                 => 'nullable|string|email|max:255',
+            'phone'                 => [ 'nullable', 'string', 'max:25', new IsPhone() ],
+            'mobile'                => [ 'nullable', 'string', 'max:25', new IsPhone() ],
             'notes'                 => 'nullable|string|max:255',
             'custid'                => 'required|integer|exists:cust,id',
         ];
@@ -127,7 +128,7 @@ class StoreContact extends FormRequest
     /**
      * Get the validation rules that apply to the request.
      *
-     * @return array<string,string>
+     * @return array<string,string|array>
      */
     public function rules(): array
     {

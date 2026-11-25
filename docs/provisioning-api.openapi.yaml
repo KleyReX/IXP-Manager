@@ -6446,15 +6446,19 @@ components:
         email:
           type: [ string, 'null' ]
           format: email
-          description: |
-            Validated without a length limit, as on the web; the column is `varchar(255)` and
-            cuts anything longer.
+          maxLength: 255
         phone:
           type: [ string, 'null' ]
-          maxLength: 50
+          minLength: 7
+          maxLength: 25
+          description: |
+            Validated by `IXP\Rules\IsPhone`, as on the web: 7 to 25 characters of digits,
+            spaces and `+ - ( ) .`, at least 7 digits - for example `+49 69 1234567`.
         mobile:
           type: [ string, 'null' ]
-          maxLength: 50
+          minLength: 7
+          maxLength: 25
+          description: Same rule as `phone`.
         notes:
           type: [ string, 'null' ]
           maxLength: 255
