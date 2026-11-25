@@ -2482,10 +2482,10 @@ paths:
                         vlan: 1
                         ipv4enabled: true
                         ipv4address: 193.189.82.101
-                        ipv4hostname: examplenet.kleyrex.net
+                        ipv4hostname: examplenet.example.net
                         ipv6enabled: true
                         ipv6address: '2001:7f8:33::a101:2586:1'
-                        ipv6hostname: examplenet.kleyrex.net
+                        ipv6hostname: examplenet.example.net
                         rsclient: true
                         irrdbfilter: true
                         as112client: false
@@ -2547,10 +2547,10 @@ paths:
                   speed: 10000
                   ipv4enabled: true
                   ipv4address: auto
-                  ipv4hostname: examplenet.kleyrex.net
+                  ipv4hostname: examplenet.example.net
                   ipv6enabled: true
                   ipv6address: auto
-                  ipv6hostname: examplenet.kleyrex.net
+                  ipv6hostname: examplenet.example.net
                   rsclient: true
                   irrdbfilter: true
                   ipv4maxbgpprefix: 500
@@ -2573,10 +2573,10 @@ paths:
                   fastlacp: false
                   ipv4enabled: true
                   ipv4address: 193.189.82.101
-                  ipv4hostname: examplenet.kleyrex.net
+                  ipv4hostname: examplenet.example.net
                   ipv6enabled: true
                   ipv6address: '2001:7f8:33::a101:2586:1'
-                  ipv6hostname: examplenet.kleyrex.net
+                  ipv6hostname: examplenet.example.net
                   rsclient: true
                   irrdbfilter: true
                   as112client: false
@@ -2590,7 +2590,7 @@ paths:
                   ipv4enabled: false
                   ipv6enabled: true
                   ipv6address: auto
-                  ipv6hostname: examplenet-v6.kleyrex.net
+                  ipv6hostname: examplenet-v6.example.net
                   rsclient: true
       responses:
         '201':
@@ -2627,10 +2627,10 @@ paths:
                       vlan: 1
                       ipv4enabled: true
                       ipv4address: 193.189.82.101
-                      ipv4hostname: examplenet.kleyrex.net
+                      ipv4hostname: examplenet.example.net
                       ipv6enabled: true
                       ipv6address: '2001:7f8:33::a101:2586:1'
-                      ipv6hostname: examplenet.kleyrex.net
+                      ipv6hostname: examplenet.example.net
                       rsclient: true
                       irrdbfilter: true
                       as112client: false
@@ -2825,10 +2825,10 @@ paths:
                         vlan: 1
                         ipv4enabled: true
                         ipv4address: 193.189.82.101
-                        ipv4hostname: examplenet.kleyrex.net
+                        ipv4hostname: examplenet.example.net
                         ipv6enabled: true
                         ipv6address: '2001:7f8:33::a101:2586:1'
-                        ipv6hostname: examplenet.kleyrex.net
+                        ipv6hostname: examplenet.example.net
                         rsclient: true
                         irrdbfilter: true
                         as112client: false
@@ -2911,7 +2911,7 @@ paths:
                       vlan: 1
                       ipv4enabled: true
                       ipv4address: 193.189.82.101
-                      ipv4hostname: examplenet.kleyrex.net
+                      ipv4hostname: examplenet.example.net
                       ipv6enabled: false
                       ipv6address: null
                       ipv6hostname: null
@@ -3578,10 +3578,10 @@ paths:
                   vlanid: 2
                   ipv4enabled: true
                   ipv4address: auto
-                  ipv4hostname: examplenet.lan2.kleyrex.net
+                  ipv4hostname: examplenet.lan2.example.net
                   ipv6enabled: true
                   ipv6address: auto
-                  ipv6hostname: examplenet.lan2.kleyrex.net
+                  ipv6hostname: examplenet.lan2.example.net
                   ipv4bgpmd5secret: s3cret-handed-to-the-member
                   ipv6bgpmd5secret: s3cret-handed-to-the-member
                   rsclient: true
@@ -3592,7 +3592,7 @@ paths:
                   vlanid: 2
                   ipv4enabled: true
                   ipv4address: 10.2.0.77
-                  ipv4hostname: examplenet.lan2.kleyrex.net
+                  ipv4hostname: examplenet.lan2.example.net
                   ipv4maxbgpprefix: 500
                   ipv6enabled: false
                   rsclient: true
@@ -3611,14 +3611,14 @@ paths:
                   vlan: 2
                   ipv4enabled: true
                   ipv4address: 10.2.0.77
-                  ipv4hostname: examplenet.lan2.kleyrex.net
+                  ipv4hostname: examplenet.lan2.example.net
                   ipv4bgpmd5secret_set: true
                   ipv4canping: false
                   ipv4monitorrcbgp: false
                   ipv4maxbgpprefix: null
                   ipv6enabled: true
                   ipv6address: '2001:db8:2::4d'
-                  ipv6hostname: examplenet.lan2.kleyrex.net
+                  ipv6hostname: examplenet.lan2.example.net
                   ipv6bgpmd5secret_set: true
                   ipv6canping: false
                   ipv6monitorrcbgp: false
@@ -3782,7 +3782,7 @@ paths:
                 value:
                   ipv6enabled: true
                   ipv6address: auto
-                  ipv6hostname: examplenet.kleyrex.net
+                  ipv6hostname: examplenet.example.net
               leaveQuarantine:
                 summary: move from the quarantine VLAN to the peering LAN
                 value:
@@ -3804,14 +3804,14 @@ paths:
                   vlan: 2
                   ipv4enabled: true
                   ipv4address: 10.2.0.77
-                  ipv4hostname: examplenet.lan2.kleyrex.net
+                  ipv4hostname: examplenet.lan2.example.net
                   ipv4bgpmd5secret_set: true
                   ipv4canping: false
                   ipv4monitorrcbgp: false
                   ipv4maxbgpprefix: null
                   ipv6enabled: true
                   ipv6address: '2001:db8:2::4d'
-                  ipv6hostname: examplenet.lan2.kleyrex.net
+                  ipv6hostname: examplenet.lan2.example.net
                   ipv6bgpmd5secret_set: true
                   ipv6canping: false
                   ipv6monitorrcbgp: false
@@ -4233,7 +4233,7 @@ paths:
                   - id: 5
                     name: vc501
                     infrastructure: 1
-                    hostname: vc501.kleyrex.net
+                    hostname: vc501.example.net
                     active: true
                     rack: 3
                     facility: 2
@@ -4241,7 +4241,7 @@ paths:
                   - id: 13
                     name: vc513
                     infrastructure: 1
-                    hostname: vc513.kleyrex.net
+                    hostname: vc513.example.net
                     active: true
                     rack: 7
                     facility: 4
@@ -4689,7 +4689,7 @@ paths:
                         member_name: Example Networks GmbH
                         connection: 501
                         vlan_interface: 733
-                        hostname: example.peering.kleyrex.net
+                        hostname: example.peering.example.net
                   total: 2
                   truncated: false
                 ipv6:
@@ -5190,10 +5190,10 @@ paths:
                     speed: 10000
                     ipv4enabled: true
                     ipv4address: auto
-                    ipv4hostname: examplenet.kleyrex.net
+                    ipv4hostname: examplenet.example.net
                     ipv6enabled: true
                     ipv6address: '2001:7f8:33::a101:2586:1'
-                    ipv6hostname: examplenet.kleyrex.net
+                    ipv6hostname: examplenet.example.net
                     rsclient: true
                     irrdbfilter: true
               memberOnly:
@@ -7946,7 +7946,7 @@ components:
         - id: 13
           name: vc513
           infrastructure: 1
-          hostname: vc513.kleyrex.net
+          hostname: vc513.example.net
           active: true
           rack: 7
           facility: 4
@@ -8148,7 +8148,7 @@ components:
             member_name: Example Networks GmbH
             connection: 501
             vlan_interface: 733
-            hostname: example.peering.kleyrex.net
+            hostname: example.peering.example.net
 
     AddressHolder:
       type: object

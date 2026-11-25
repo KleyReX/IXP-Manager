@@ -1472,7 +1472,7 @@ Every address which is not free names who holds it - the columns the web address
 { "id": 342, "address": "193.189.82.102", "free": false,
   "assigned_to": { "custid": 97, "member_name": "Example Networks GmbH",
                    "connection": 501, "vlan_interface": 733,
-                   "hostname": "example.peering.kleyrex.net" } }
+                   "hostname": "example.peering.example.net" } }
 ```
 
 `assigned_to` is `null` for a free address, so `free` and `assigned_to` always agree.
