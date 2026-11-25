@@ -13,7 +13,7 @@
 
 # Outgoing webhooks
 
-IXP Manager tells an external system - KleyReX's API5 - about changes to members, users,
+IXP Manager tells an external system about changes to members, users,
 contacts, connections, switch ports and member notes, **whoever made them**: IXP staff or a
 member's own users in the web UI, the provisioning API, other API clients, artisan commands or
 the scheduler. One HTTPS `POST` per event, signed per [Standard Webhooks][sw], delivered at least
@@ -36,7 +36,7 @@ Off by default. Nothing is recorded or sent until `IXP_WEBHOOKS_ENABLED=true`.
 
    ```ini
    IXP_WEBHOOKS_ENABLED=true
-   IXP_WEBHOOKS_URL=https://api5.example.net/ixp-manager/webhooks
+   IXP_WEBHOOKS_URL=https://orders.example.net/ixp-manager/webhooks
    IXP_WEBHOOKS_SECRET=whsec_...
    ```
 
@@ -77,7 +77,7 @@ under `ixp_api.webhooks.endpoints` in `config/ixp_api.php`, with its own `url`, 
 
 ```http
 POST /ixp-manager/webhooks HTTP/1.1
-Host: api5.example.net
+Host: orders.example.net
 Content-Type: application/json
 User-Agent: IXP-Manager-Webhooks/7.4.1
 webhook-id: 0193f7a2-5c3e-7b21-9a4f-6d0c2e8b1f37
@@ -256,10 +256,10 @@ offboarding show.
   "source": { "app": "ixp-manager", "url": "https://ixp.example.net", "version": "7.4.1" },
   "origin": {
     "channel": "provisioning_api", "route": "api-v4-provisioning@member-update",
-    "command": null, "job": null, "api_key_id": 7, "correlation_id": "api5-cmd-88f1",
+    "command": null, "job": null, "api_key_id": 7, "correlation_id": "orders-cmd-88f1",
     "unit_id": "0193f7a2-3a39-718d-951e-403a8a12b6cc"
   },
-  "actor": { "type": "user", "user_id": 3, "username": "api5", "privs": 3, "customer_id": 1, "impersonated_by": null },
+  "actor": { "type": "user", "user_id": 3, "username": "orders", "privs": 3, "customer_id": 1, "impersonated_by": null },
   "resource": { "type": "member", "id": 97, "member_id": 97 },
   "data": {
     "id": 97, "name": "Example Networks Ltd", "shortname": "example", "abbreviatedName": "EXAMPLE",
@@ -306,7 +306,7 @@ one or removing them from one is a `user.updated` whose change is in `links`:
   "data": {
     "id": 314, "username": "janedoe", "name": "Jane Doe", "email": "jane@example.com",
     "authorisedMobile": "+353 87 1234567", "enabled": true, "custid": 97, "peeringdb_id": null,
-    "creator": "api5", "created_at": "2026-11-24T14:03:12+00:00", "updated_at": "2026-11-24T14:05:40+00:00",
+    "creator": "orders", "created_at": "2026-11-24T14:03:12+00:00", "updated_at": "2026-11-24T14:05:40+00:00",
     "links": [
       { "id": 512, "custid": 97, "user_id": 314, "privs": 2, "created_by": { "type": "api", "user_id": 3 },
         "last_login_date": null, "last_login_from": null, "last_login_via": null,
@@ -467,28 +467,28 @@ processed for at least the retry window plus a margin - seven days is comfortabl
 
 ## The loop-prevention contract
 
-API5 both calls the provisioning API and receives the webhooks those calls cause. Without care
+The ordering system both calls the provisioning API and receives the webhooks those calls cause. Without care
 it would act on the echo of its own writes. The contract:
 
-1. **API5 sends `X-Correlation-Id`** with every provisioning request: a fresh value per command,
-   recorded on API5's side before the call. 1 to 100 characters from `A-Z a-z 0-9 . _ : -` (a
+1. **The ordering system sends `X-Correlation-Id`** with every provisioning request: a fresh value per command,
+   recorded on the ordering system's side before the call. 1 to 100 characters from `A-Z a-z 0-9 . _ : -` (a
    UUID fits); anything else is answered with `422` before anything is written. The header is
    echoed in the response.
 2. **Every event the request causes carries it**, side effects included: `origin.channel` is
    `provisioning_api`, `origin.api_key_id` the key's id, `origin.correlation_id` the header. A
    connection order produces a `connection.created` *and* a `switch_port.updated`, both stamped.
-3. **On receipt**, an event whose `origin.correlation_id` is one of API5's own (or, failing
-   that, whose `origin.api_key_id` is API5's key) is the echo of API5's own command. API5 does
+3. **On receipt**, an event whose `origin.correlation_id` is one of the ordering system's own (or, failing
+   that, whose `origin.api_key_id` is the ordering system's key) is the echo of the ordering system's own command. The ordering system does
    not re-run business logic for it, but adopts what IXP Manager decided: ids, the address
    allocated for `auto`, the channel group, the bundle name, defaults.
 4. **Webhooks can arrive before the HTTP response** of the call that caused them; the
    correlation id ties the two together either way.
-5. **A write that changes nothing produces no event.** API5 writing back exactly what it was
+5. **A write that changes nothing produces no event.** The ordering system writing back exactly what it was
    told cannot start a ping-pong. It still can when both sides normalise a value differently
    (letter case, phone number or MAC formatting): compare with `data` before writing back.
 6. **`IXP_WEBHOOKS_SKIP_API_KEYS`** withholds a key's own changes from an endpoint altogether
    (recorded, delivery status `skipped`, never sent; `webhooks:retry --skipped` sends them after
-   all). That also withholds the side effects of API5's calls on other resources, such as the
+   all). That also withholds the side effects of the ordering system's calls on other resources, such as the
    port a connection took - so the recommended setting is to leave it empty and follow points 1
    to 3.
 

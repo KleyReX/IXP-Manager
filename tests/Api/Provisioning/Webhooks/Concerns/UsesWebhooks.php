@@ -64,7 +64,7 @@ trait UsesWebhooks
      */
     protected const string OLD_SECRET = 'whsec_c2VjcmV0LWJlaW5nLXJvdGF0ZWQtb3V0LW5vdy0wMQ==';
 
-    protected const string URL = 'https://api5.example.test/ixp-manager/webhooks';
+    protected const string URL = 'https://orders.example.test/ixp-manager/webhooks';
 
     /**
      * Switch webhooks on with one endpoint, `default`, which answers 200 unless the test fakes

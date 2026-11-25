@@ -72,9 +72,9 @@ class OriginTest extends TestCase
     {
         $this->enableWebhooks();
 
-        $this->provisioningWith( 'POST', 'member', $this->memberPayload( 'whorigin' ), [ 'X-Correlation-Id' => 'api5-cmd-0001' ] )
+        $this->provisioningWith( 'POST', 'member', $this->memberPayload( 'whorigin' ), [ 'X-Correlation-Id' => 'orders-cmd-0001' ] )
             ->assertStatus( 201 )
-            ->assertHeader( 'X-Correlation-Id', 'api5-cmd-0001' );
+            ->assertHeader( 'X-Correlation-Id', 'orders-cmd-0001' );
 
         $event = $this->onlyEnvelope( 'member.created' );
 
@@ -84,7 +84,7 @@ class OriginTest extends TestCase
             'command'           => null,
             'job'               => null,
             'api_key_id'        => $this->apiKeyId(),
-            'correlation_id'    => 'api5-cmd-0001',
+            'correlation_id'    => 'orders-cmd-0001',
         ], array_diff_key( $event[ 'origin' ], [ 'unit_id' => true ] ) );
         $this->assertNotNull( $event[ 'origin' ][ 'unit_id' ] );
 
@@ -100,10 +100,10 @@ class OriginTest extends TestCase
         $this->assertSame( [], $event[ 'changes' ] );
 
         // the events table is searchable by the same values
-        $this->assertSame( 1, DB::table( 'webhook_events' )->where( 'correlation_id', 'api5-cmd-0001' )
+        $this->assertSame( 1, DB::table( 'webhook_events' )->where( 'correlation_id', 'orders-cmd-0001' )
             ->where( 'origin_api_key_id', $this->apiKeyId() )->count() );
 
-        Http::assertSent( fn( $r ) => $r->url() === self::URL && json_decode( $r->body(), true )[ 'origin' ][ 'correlation_id' ] === 'api5-cmd-0001' );
+        Http::assertSent( fn( $r ) => $r->url() === self::URL && json_decode( $r->body(), true )[ 'origin' ][ 'correlation_id' ] === 'orders-cmd-0001' );
     }
 
     /**
@@ -225,7 +225,7 @@ class OriginTest extends TestCase
 
         $this->provisioningWith( 'GET', 'member/2', [], [ 'X-Correlation-Id' => str_repeat( 'x', 100 ) ] )->assertOk();
         $this->provisioningWith( 'GET', 'member/2', [], [ 'X-Correlation-Id' => '0193f7a2-5c3e-7b21-9a4f-6d0c2e8b1f37' ] )->assertOk();
-        $this->provisioningWith( 'GET', 'member/2', [], [ 'X-Correlation-Id' => 'api5:order.42_retry-1' ] )->assertOk();
+        $this->provisioningWith( 'GET', 'member/2', [], [ 'X-Correlation-Id' => 'orders:order.42_retry-1' ] )->assertOk();
     }
 
     /**

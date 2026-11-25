@@ -5587,7 +5587,7 @@ components:
         minLength: 1
         maxLength: 100
         pattern: '^[A-Za-z0-9._:-]{1,100}$'
-      example: api5-cmd-88f1
+      example: orders-cmd-88f1
 
   headers:
 
@@ -5595,7 +5595,7 @@ components:
       description: The request's `X-Correlation-Id`, unchanged; absent when the request had none.
       schema:
         type: string
-      example: api5-cmd-88f1
+      example: orders-cmd-88f1
 
   responses:
 

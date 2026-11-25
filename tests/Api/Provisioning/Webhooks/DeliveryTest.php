@@ -327,7 +327,7 @@ class DeliveryTest extends TestCase
     public function testAMisconfiguredEndpointGetsNothing(): void
     {
         foreach( [
-            [ 'url' => 'http://api5.example.test/hook' ],
+            [ 'url' => 'http://orders.example.test/hook' ],
             [ 'secret' => '' ],
             [ 'secret' => 'whsec_dG9vLXNob3J0' ],
             [ 'secret' => 'not base64 at all!' ],
@@ -342,8 +342,8 @@ class DeliveryTest extends TestCase
         Http::assertNothingSent();
         $this->assertSame( 4, WebhookDelivery::where( 'status', WebhookDelivery::STATUS_PENDING )->count() );
 
-        $this->enable( [ 'url' => 'http://api5.example.test/hook' ], [ 'allow_http' => true ], false );
-        Http::fake( [ 'http://api5.example.test/hook' => Http::response( '', 200 ) ] );
+        $this->enable( [ 'url' => 'http://orders.example.test/hook' ], [ 'allow_http' => true ], false );
+        Http::fake( [ 'http://orders.example.test/hook' => Http::response( '', 200 ) ] );
 
         $this->assertSame( 4, $this->deliverWebhooks()[ 'default' ][ 'delivered' ], 'once allowed, the backlog goes out' );
     }

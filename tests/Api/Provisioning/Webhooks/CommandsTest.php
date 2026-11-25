@@ -110,7 +110,7 @@ class CommandsTest extends TestCase
 
         $this->artisan( 'webhooks:status' )
             ->expectsOutputToContain( 'Webhooks: enabled' )
-            ->expectsOutputToContain( 'Endpoint default: api5.example.test' )
+            ->expectsOutputToContain( 'Endpoint default: orders.example.test' )
             ->expectsOutputToContain( 'deliveries: pending 1, delivering 0, retrying 0, delivered 0, failed 0, skipped 0' )
             ->expectsOutputToContain( 'oldest undelivered: event #' )
             ->expectsOutputToContain( 'not sent back to API keys: 7' )

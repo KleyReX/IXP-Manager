@@ -28,7 +28,7 @@ use IXP\Services\Webhooks\Signer;
 
 /**
  * Webhook signatures: the Standard Webhooks scheme, checked against the specification's own
- * example, and the receiver-side verification API5 is told to implement.
+ * example, and the receiver-side verification the ordering system is told to implement.
  *
  * @author     KleyReX
  * @category   IXP

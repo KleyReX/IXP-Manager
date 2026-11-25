@@ -35,7 +35,7 @@ use IXP\Support\Provisioning\ApiKeyResolver;
  * Middleware: RecordWebhookOrigin
  *
  * Tells the webhook recorder that the changes of this request are the provisioning API's, made
- * with which key, and as part of which of the caller's commands - so that API5, which both calls
+ * with which key, and as part of which of the caller's commands - so that the ordering system, which both calls
  * this API and receives the webhooks, can recognise the echo of its own writes:
  *
  *   - origin.channel        `provisioning_api`

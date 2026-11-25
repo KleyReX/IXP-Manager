@@ -35,7 +35,7 @@ namespace IXP\Services\Webhooks;
  * the signature header carries one signature per key, separated by a space, so the receiver can
  * switch keys whenever it likes. A receiver accepts a request when any signature matches.
  *
- * An open specification rather than a scheme of our own, so that API5 can verify with a few
+ * An open specification rather than a scheme of our own, so that the ordering system can verify with a few
  * lines of hash_hmac() - or with any Standard Webhooks library - and so that the scheme has been
  * looked at by more people than wrote this class: the timestamp inside the signed content stops
  * replays, and signing the raw body stops a receiver from verifying something other than what it
@@ -130,7 +130,7 @@ final class Signer
      * Verify a request the way a receiver must: over the raw body, against the timestamp in the
      * headers, with a constant-time comparison, and only within the tolerance of its own clock.
      *
-     * Used by the tests and by webhooks:ping; it is also the reference for API5's side.
+     * Used by the tests and by webhooks:ping; it is also the reference for the ordering system's side.
      *
      * @param  string    $secret     the `whsec_...` secret
      * @param  string    $id         the webhook-id header

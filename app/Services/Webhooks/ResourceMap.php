@@ -42,7 +42,7 @@ use IXP\Models\{
 /**
  * Which webhook resources a write to a model affects.
  *
- * The recorder sees rows; API5 wants resources. A connection is a virtual interface, its physical
+ * The recorder sees rows; the ordering system wants resources. A connection is a virtual interface, its physical
  * interfaces, its VLAN interfaces with their addresses, and their MACs - one wizard run writes
  * five or six rows of it, and the webhook should say "connection created" once. So each observed
  * model is either the root of a resource or a child of one, and every write is turned into the

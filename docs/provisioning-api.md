@@ -1814,7 +1814,7 @@ member then has a connection again. A deadlock is retried, from a fresh read of 
 
 ## Webhooks
 
-The other direction - IXP Manager telling API5 about changes, whoever made them, including
+The other direction - IXP Manager telling the ordering system about changes, whoever made them, including
 staff and member users in the web UI - is described in
 [provisioning-webhooks.md](provisioning-webhooks.md). It is off by default
 (`IXP_WEBHOOKS_ENABLED`) and needs `php artisan migrate` for its three tables.

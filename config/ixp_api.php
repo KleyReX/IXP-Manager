@@ -266,7 +266,7 @@ return [
     | Outgoing webhooks
     |--------------------------------------------------------------------------
     |
-    | IXP Manager tells an external system (KleyReX's API5) about changes to
+    | IXP Manager tells an external system about changes to
     | members, users, contacts, connections, switch ports and notes - whoever
     | made them: staff or members in the web UI, the provisioning API, artisan
     | commands or the scheduler. Changes are recorded in an outbox inside the

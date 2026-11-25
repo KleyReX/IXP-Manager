@@ -32,7 +32,7 @@ use IXP\Models\ApiKey;
  *
  * ApiAuthenticate resolves the key but keeps it to itself: it logs the key's user in with
  * Auth::onceUsingId() and the key object is gone. Two provisioning middlewares need it again -
- * RestrictSourceAddress for the key's own allow-list, RecordWebhookOrigin to tell API5 which key
+ * RestrictSourceAddress for the key's own allow-list, RecordWebhookOrigin to tell the ordering system which key
  * made a change - and they must agree on which key that is, so the lookup exists once.
  *
  * The key is looked up the same two ways ApiAuthenticate accepts one: a modern key by its token

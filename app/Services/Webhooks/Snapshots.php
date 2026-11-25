@@ -49,7 +49,7 @@ use IXP\Support\Provisioning\Presenters\{
  * The state of a resource as a webhook reports it: the event's `data`.
  *
  * Every snapshot is the provisioning API's own representation, built by its presenters, so that
- * a webhook and a GET of the same resource cannot drift apart and API5 can apply both with the
+ * a webhook and a GET of the same resource cannot drift apart and the ordering system can apply both with the
  * same code. That also settles what is never sent: the presenters leave out password hashes,
  * BGP MD5 secrets (reported only as `..._set`), SNMP communities, tokens and user preferences.
  *
