@@ -231,7 +231,7 @@ class AccessControlTest extends TestCase
     {
         $this->assertTrue(
             (bool)config( 'ixp_api.provisioning.enabled' ),
-            'die Testumgebung muss die Provisioning-API einschalten, sonst prüft diese Suite nichts'
+            'the test environment has to switch the provisioning API on, or this suite checks nothing'
         );
 
         $this->assertTrue( \Route::has( 'api-v4-provisioning@ping' ) );
@@ -256,7 +256,7 @@ class AccessControlTest extends TestCase
 
             $this->assertFalse(
                 $config[ 'provisioning' ][ 'enabled' ],
-                'die Provisioning-API muss ohne ausdrückliche Freischaltung aus sein'
+                'the provisioning API must be off unless it is switched on explicitly'
             );
         } finally {
             if( $previous !== false ) {

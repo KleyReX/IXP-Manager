@@ -142,7 +142,7 @@ servers:
       host:
         default: manager.example.net
         description: |
-          Hostname of the IXP Manager installation, for example `manager.kleyrex.net`.
+          Hostname of the IXP Manager installation, for example `manager.example.net`.
 
 security:
   - ApiKeyAuth: []

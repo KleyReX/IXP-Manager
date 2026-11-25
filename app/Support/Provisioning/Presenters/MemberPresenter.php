@@ -34,7 +34,7 @@ use IXP\Models\Customer;
  *
  * Deliberately an explicit field list rather than the model's toArray(): the response shape is
  * a contract with the caller and must not change because a column was added to `cust`. Every
- * member the API returns - created, read, changed or listed - goes through here, so that API5
+ * member the API returns - created, read, changed or listed - goes through here, so that an external system
  * can diff any of them against its own records field by field.
  *
  * Two fields are computed, and both exist because IXP Manager has two meanings of "left":

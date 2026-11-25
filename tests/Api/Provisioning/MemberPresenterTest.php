@@ -36,7 +36,7 @@ use Tests\TestCase;
 /**
  * The member representation (MemberPresenter), as every member endpoint returns it.
  *
- * The field list is a contract with API5: testTheFieldListIsTheContract pins it, so that a
+ * The field list is a contract with its callers: testTheFieldListIsTheContract pins it, so that a
  * field cannot appear or vanish without this test - and the documentation - being updated.
  *
  * @author     KleyReX

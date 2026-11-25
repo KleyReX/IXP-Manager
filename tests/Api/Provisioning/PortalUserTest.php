@@ -83,7 +83,7 @@ class PortalUserTest extends TestCase
     }
 
     /**
-     * Create a user the way API5 does, through POST member/{cust}/user.
+     * Create a user the way an order system does, through POST member/{cust}/user.
      */
     private function createUser( Customer $cust, string $username, array $overrides = [] ): User
     {
@@ -115,7 +115,7 @@ class PortalUserTest extends TestCase
     // ------------------------------------------------------------- GET user
 
     /**
-     * The lookup API5 needs before creating a user: is there an account for this address
+     * The lookup a caller needs before creating a user: is there an account for this address
      * already? Case must not matter - the web edit stores an address as typed.
      */
     public function testTheListFindsAUserByEmailWhateverTheCase(): void
