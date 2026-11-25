@@ -46,7 +46,13 @@ final class Endpoints
     {
         $endpoints = [];
 
-        foreach( (array)config( 'ixp_api.webhooks.endpoints', [] ) as $name => $config ) {
+        // What .env gives, not what config/ixp_api.php defaults to - which is all that static
+        // analysis can see - so nothing here may assume a type. A numeric endpoint name is
+        // an int key, a url may arrive as anything env() parses to (null, true, ...).
+        /** @var mixed $configured */
+        $configured = config( 'ixp_api.webhooks.endpoints', [] );
+
+        foreach( (array)$configured as $name => $config ) {
             $url = trim( (string)( $config[ 'url' ] ?? '' ) );
 
             if( $url !== '' ) {

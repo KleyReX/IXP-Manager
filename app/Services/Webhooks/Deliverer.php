@@ -138,8 +138,8 @@ final class Deliverer
                 'X-IXP-Manager-Attempt'     => (string)$attempt,
             ] )
             ->withBody( $body, 'application/json' )
-            ->connectTimeout( max( 1, (int)config( 'ixp_api.webhooks.connect_timeout', 3 ) ) )
-            ->timeout( max( 1, (int)config( 'ixp_api.webhooks.timeout', 10 ) ) )
+            ->connectTimeout( max( 1, config( 'ixp_api.webhooks.connect_timeout', 3 ) ) )
+            ->timeout( max( 1, config( 'ixp_api.webhooks.timeout', 10 ) ) )
             ->withOptions( [ 'allow_redirects' => false ] )
             ->post( $endpoint->url );
     }
@@ -257,7 +257,7 @@ final class Deliverer
             ->update( [
                 'status'        => WebhookDelivery::STATUS_DELIVERING,
                 'locked_until'  => $now->copy()->addSeconds(
-                    (int)config( 'ixp_api.webhooks.timeout', 10 ) + (int)config( 'ixp_api.webhooks.connect_timeout', 3 ) + self::CLAIM_GRACE
+                    config( 'ixp_api.webhooks.timeout', 10 ) + config( 'ixp_api.webhooks.connect_timeout', 3 ) + self::CLAIM_GRACE
                 ),
                 'attempts'      => DB::raw( 'attempts + 1' ),
             ] ) === 1;
@@ -329,8 +329,8 @@ final class Deliverer
         $reason   = $status !== null ? "HTTP {$status}" : Str::before( $error, ':' );
 
         $giveUp = $permanent
-            || $d->attempts >= max( 1, (int)config( 'ixp_api.webhooks.max_attempts', 11 ) )
-            || $age >= max( 1, (int)config( 'ixp_api.webhooks.max_age_hours', 72 ) ) * 3600;
+            || $d->attempts >= max( 1, config( 'ixp_api.webhooks.max_attempts', 11 ) )
+            || $age >= max( 1, config( 'ixp_api.webhooks.max_age_hours', 72 ) ) * 3600;
 
         if( $giveUp ) {
             $d->update( [

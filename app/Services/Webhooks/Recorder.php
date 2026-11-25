@@ -146,7 +146,12 @@ final class Recorder
      */
     public static function enabled(): bool
     {
-        return (bool)config( 'ixp_api.webhooks.enabled', false );
+        // env() returns a string for anything but the words true/false/null/empty, so "1" and
+        // "0" arrive as strings: the cast is not redundant, whatever the config file's default
+        /** @var mixed $enabled */
+        $enabled = config( 'ixp_api.webhooks.enabled', false );
+
+        return (bool)$enabled;
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -521,6 +526,8 @@ final class Recorder
      */
     private function deliverNow(): bool
     {
+        // not necessarily a string: env() turns the words true and false into booleans
+        /** @var mixed $setting */
         $setting = config( 'ixp_api.webhooks.deliver_after_response', 'auto' );
 
         if( is_string( $setting ) && strtolower( trim( $setting ) ) === 'auto' ) {
