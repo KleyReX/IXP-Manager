@@ -233,6 +233,13 @@ class ConnectionController extends Common
      */
     public function list( Request $r ): JsonResponse
     {
+        /**
+         * Query-string values arrive as strings, whatever the `integer` rule says; hence the casts below.
+         * The shape is spelled out because the status and limit rules are built by concatenation,
+         * which static analysis cannot read.
+         *
+         * @var array{member?:int|string|null,switch?:int|string|null,vlan?:int|string|null,status?:int|string|null,limit?:int|string|null,offset?:int|string|null} $filters
+         */
         $filters = $r->validate( [
             'member'    => 'nullable|integer|exists:cust,id',
             'switch'    => 'nullable|integer|exists:switch,id',

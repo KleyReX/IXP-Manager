@@ -168,6 +168,7 @@ class StoreVlanInterface extends WebStoreVlanInterface
      *
      * @return void
      */
+    #[\Override]
     protected function prepareForValidation(): void
     {
         $this->stripRouteParameterKeys();
